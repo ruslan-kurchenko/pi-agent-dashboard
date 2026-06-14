@@ -22,6 +22,10 @@ export function readConfigRedacted(): DashboardConfig {
   if (config.auth) {
     config.auth = redactAuthSecrets(config.auth);
   }
+  // Env-gated monitor-only mode: hide all spawn UI on the client.
+  if (process.env.PI_DASHBOARD_SPAWN_DISABLED === "1") {
+    config.spawnDisabled = true;
+  }
   return config;
 }
 

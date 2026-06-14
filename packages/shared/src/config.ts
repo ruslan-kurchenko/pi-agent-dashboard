@@ -287,6 +287,12 @@ export interface DashboardConfig {
    */
   gitWorktreeEnabled: boolean;
   /**
+   * When true, all session-spawn UI affordances are hidden.
+   * Sourced from `PI_DASHBOARD_SPAWN_DISABLED=1` env var on the server.
+   * Monitor/control-only mode for external spawn authorities (e.g. wall-e daemon).
+   */
+  spawnDisabled?: boolean;
+  /**
    * Per-plugin config namespaces. Reserved top-level key.
    * Each plugin's config lives at plugins.<id>.*
    * Plugin-shaped legacy top-level keys (e.g. openspec.*) stay at top-level

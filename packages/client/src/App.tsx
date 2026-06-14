@@ -466,6 +466,8 @@ export default function App() {
   // mount. Defaults to true while loading. See change:
   // openspec-worktree-spawn-button.
   const [gitWorktreeEnabled, setGitWorktreeEnabled] = useState<boolean>(true);
+  // Monitor-only mode: hides all spawn UI when PI_DASHBOARD_SPAWN_DISABLED=1 on server.
+  const [spawnDisabled, setSpawnDisabled] = useState<boolean>(false);
   const [discoveredServers, setDiscoveredServers] = useState<import("./components/ServerSelector.js").DiscoveredServerInfo[]>([]);
   // Global chat-display preferences. `undefined` until the initial GET
   // /api/preferences/display response lands. When the server returns
@@ -613,6 +615,9 @@ export default function App() {
       .then((d) => {
         if (d.success && typeof d.data?.gitWorktreeEnabled === "boolean") {
           setGitWorktreeEnabled(d.data.gitWorktreeEnabled);
+        }
+        if (d.success && d.data?.spawnDisabled === true) {
+          setSpawnDisabled(true);
         }
       })
       .catch(() => {});
@@ -1160,6 +1165,7 @@ export default function App() {
       editorStatuses={editorStatuses}
       editorAvailable={editorAvailable}
       gitWorktreeEnabled={gitWorktreeEnabled}
+      spawnDisabled={spawnDisabled}
       errorSessionIds={errorSessionIds}
       retrySessionIds={retrySessionIds}
       spawnErrors={spawnErrors}
@@ -1807,7 +1813,7 @@ export default function App() {
                 sessionsCount={sessions.size}
                 firstPinnedCwd={pinnedDirectories[0] ?? null}
                 onOpenPinDialog={() => setPinDialogOpen(true)}
-                onSpawnSession={handleSpawnSession}
+                onSpawnSession={spawnDisabled ? undefined : handleSpawnSession}
                 navigate={navigate}
               />
             )
@@ -1921,7 +1927,7 @@ export default function App() {
                 sessionsCount={sessions.size}
                 firstPinnedCwd={pinnedDirectories[0] ?? null}
                 onOpenPinDialog={() => setPinDialogOpen(true)}
-                onSpawnSession={handleSpawnSession}
+                onSpawnSession={spawnDisabled ? undefined : handleSpawnSession}
                 navigate={navigate}
               />
             )
@@ -1940,7 +1946,7 @@ export default function App() {
         })()} onMessage={onMessage} />}
         {tunnelSetupMatch && <ZrokInstallGuide onBack={() => navigate("/")} />}
       </div>
-      {boardWorktreeForChange && (
+      {boardWorktreeForChange && !spawnDisabled && (
         <WorktreeSpawnDialog
           cwd={boardWorktreeForChange.cwd}
           initialBranch={`os/${boardWorktreeForChange.changeName}`}

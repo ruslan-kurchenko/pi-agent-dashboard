@@ -205,6 +205,26 @@ export async function createServer(config: ServerConfig): Promise<DashboardServe
     console.log(`[dashboard] Session scan: ${scanResult.sessions.length} sessions, ${scanResult.cacheUpdates} cache updates`);
   }
 
+  // Periodic rescan: pick up sessions archived to ~/.pi/agent/sessions/ after startup.
+  const rescanInterval = setInterval(() => {
+    const rescan = scanAllSessions();
+    let added = 0;
+    for (const session of rescan.sessions) {
+      if (sessionManager.get(session.id)) continue; // already known
+      const restored = { ...session, dataUnavailable: true };
+      if (restored.status !== "ended") {
+        restored.status = "ended";
+        restored.endedAt = restored.endedAt ?? Date.now();
+      }
+      sessionManager.restore(restored);
+      added++;
+    }
+    if (added > 0) {
+      console.log(`[dashboard] Periodic rescan: discovered ${added} new session(s)`);
+    }
+  }, 60_000);
+  rescanInterval.unref(); // don't block process exit
+
   // Save per-session .meta.json on any change
   sessionManager.onChange = (sessionId: string, ctx) => {
     const session = sessionManager.get(sessionId);
@@ -1371,6 +1391,7 @@ export async function createServer(config: ServerConfig): Promise<DashboardServe
     },
 
     async stop() {
+      clearInterval(rescanInterval);
       // Stop mDNS before closing
       try {
         if (mdnsBrowser) { mdnsBrowser.stop(); mdnsBrowser = null; }

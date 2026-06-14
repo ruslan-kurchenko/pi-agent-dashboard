@@ -22,6 +22,8 @@ interface Props {
   showWorktree: boolean;
   onSpawnSession: () => void;
   onSpawnWorktree?: () => void;
+  /** Monitor-only mode: hides all spawn affordances. */
+  spawnDisabled?: boolean;
 }
 
 export function FolderSpawnButtons({
@@ -29,7 +31,9 @@ export function FolderSpawnButtons({
   showWorktree,
   onSpawnSession,
   onSpawnWorktree,
+  spawnDisabled,
 }: Props) {
+  if (spawnDisabled) return null;
   return (
     <div className="flex flex-col gap-1">
       <button
