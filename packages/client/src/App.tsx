@@ -1814,6 +1814,7 @@ export default function App() {
                 firstPinnedCwd={pinnedDirectories[0] ?? null}
                 onOpenPinDialog={() => setPinDialogOpen(true)}
                 onSpawnSession={spawnDisabled ? undefined : handleSpawnSession}
+                spawnDisabled={spawnDisabled}
                 navigate={navigate}
               />
             )
@@ -1928,6 +1929,7 @@ export default function App() {
                 firstPinnedCwd={pinnedDirectories[0] ?? null}
                 onOpenPinDialog={() => setPinDialogOpen(true)}
                 onSpawnSession={spawnDisabled ? undefined : handleSpawnSession}
+                spawnDisabled={spawnDisabled}
                 navigate={navigate}
               />
             )

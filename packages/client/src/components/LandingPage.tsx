@@ -15,6 +15,8 @@ export interface LandingPageProps {
   onSpawnSession?: (cwd: string) => void;
   /** Router navigation function (e.g. wouter's navigate). */
   navigate?: (to: string) => void;
+  /** Monitor-only mode (PI_DASHBOARD_SPAWN_DISABLED): hide the spawn onboarding. */
+  spawnDisabled?: boolean;
 }
 
 type StepState = "pending" | "done" | "locked";
@@ -93,7 +95,22 @@ export function LandingPage({
   onOpenPinDialog,
   onSpawnSession,
   navigate,
+  spawnDisabled = false,
 }: LandingPageProps = {}) {
+  // Monitor-only mode: the wall-e daemon is the sole spawn authority, so the
+  // spawn onboarding (Add folder / Start session) must never appear. Show a
+  // minimal placeholder pointing at the session list instead.
+  if (spawnDisabled) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-[var(--text-tertiary)]">
+        <div className="text-center">
+          <div className="text-6xl mb-4 text-blue-500 opacity-50">π</div>
+          <p className="text-sm">Monitor-only — select a session on the left</p>
+        </div>
+      </div>
+    );
+  }
+
   // Legacy behaviour: if no onboarding props are supplied at all, fall back to the
   // original minimal placeholder (keeps existing tests and stories intact).
   const hasOnboardingContext =
