@@ -283,7 +283,14 @@ function readJsonlHeaderSync(filePath: string): { id: string; cwd: string; name?
             }
           }
         }
-        if (header && firstMessage) break;
+        // NOTE: do NOT break on `header && firstMessage` — pi writes the
+        // auto-name (`session_info`) AFTER the first user message, so an early
+        // break loses the name and the card falls back to the raw first
+        // message (e.g. the daemon's `<context/><message>` envelope). Break
+        // only once we also have the name; otherwise scan to EOF (the file is
+        // already in memory). `name` keeps the latest session_info (handles
+        // renames); `firstMessage` keeps the first (guarded by `!firstMessage`).
+        if (header && firstMessage && name) break;
       } catch { /* skip malformed lines */ }
     }
 
