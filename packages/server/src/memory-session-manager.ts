@@ -83,7 +83,17 @@ export interface SessionManager {
   onUnregister?: (sessionId: string) => void;
 }
 
-export function createMemorySessionManager(): SessionManager {
+/**
+ * @param localMachine walle-multi-machine: resolves THIS server's machine
+ * identity (`{ id, label?, accent? }`) or undefined on single-machine
+ * installs. Used to stamp `machine` on any ingested session that lacks one
+ * — scanned/archived sessions (restore) and machine-less local registers —
+ * so the client's per-machine filter (`s.machine?.id === selectedId`) and
+ * the roster attribute them to this host instead of dropping them.
+ */
+export function createMemorySessionManager(
+  localMachine?: () => { id: string; label?: string; accent?: string } | undefined,
+): SessionManager {
   const sessions = new Map<string, DashboardSession>();
 
   const mgr: SessionManager = {
@@ -149,7 +159,9 @@ export function createMemorySessionManager(): SessionManager {
         // existing tag when the bridge omits it; first-register accepts the
         // bridge-supplied value or leaves undefined (single-machine install).
         // See change: walle-multi-machine.
-        machine: params.machine ?? existing?.machine,
+        // walle-multi-machine: fall back to THIS server's machine so a
+        // machine-less local register attributes to the host, not nowhere.
+        machine: params.machine ?? existing?.machine ?? localMachine?.(),
       };
       sessions.set(params.id, session);
       mgr.onChange?.(params.id, {
@@ -160,6 +172,13 @@ export function createMemorySessionManager(): SessionManager {
     },
 
     restore(session: DashboardSession): void {
+      // walle-multi-machine: stamp scanned/archived sessions (which carry no
+      // machine) with this host's identity so the client's per-machine filter
+      // includes them under the local machine instead of dropping them.
+      if (!session.machine) {
+        const lm = localMachine?.();
+        if (lm) session.machine = lm;
+      }
       sessions.set(session.id, session);
     },
 

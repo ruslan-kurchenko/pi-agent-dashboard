@@ -178,7 +178,16 @@ export async function createServer(config: ServerConfig): Promise<DashboardServe
   }
 
   const preferencesStore = createPreferencesStore();
-  const sessionManager = createMemorySessionManager();
+  // walle-multi-machine: resolve THIS server's machine identity from
+  // WALLE_MACHINE_ID + the curated config entry (label/accent). Passed as a
+  // thunk so runtime label/accent edits via POST /api/machines are picked up.
+  // loadConfig() is fs-cheap (<1ms). Undefined on single-machine installs.
+  const sessionManager = createMemorySessionManager(() => {
+    const id = process.env.WALLE_MACHINE_ID;
+    if (!id) return undefined;
+    const m = loadConfig().machines.find((e) => e.id === id);
+    return m ? { id: m.id, label: m.label, accent: m.accent } : { id };
+  });
   const metaPersistence = createMetaPersistence();
   const sessionOrderManager = createSessionOrderManager(preferencesStore);
   const pendingForkRegistry = createPendingForkRegistry();

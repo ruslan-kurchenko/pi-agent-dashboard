@@ -152,4 +152,51 @@ describe("memory-session-manager", () => {
     sm.unregister("s1");
     expect(ids).toEqual(["s1", "s1", "s1"]);
   });
+
+  // walle-multi-machine: machine-less sessions are stamped with the local
+  // machine so the client's per-machine filter attributes them to this host.
+  describe("localMachine stamping", () => {
+    const LM = { id: "walle-daemon", label: "WALL•E", accent: "#5fb4a4" };
+
+    it("stamps a machine-less register with the local machine", () => {
+      const sm = createMemorySessionManager(() => LM);
+      const s = sm.register({ id: "s1", cwd: "/workspace", source: "tui" });
+      expect(s.machine).toEqual(LM);
+    });
+
+    it("stamps a machine-less restore (scanned/archived session)", () => {
+      const sm = createMemorySessionManager(() => LM);
+      sm.restore({
+        id: "arch1",
+        cwd: "/workspace/agent",
+        source: "tui",
+        status: "ended",
+        startedAt: 1,
+        tokensIn: 0,
+        tokensOut: 0,
+        cost: 0,
+      });
+      expect(sm.get("arch1")?.machine).toEqual(LM);
+    });
+
+    it("does NOT override an explicit machine on register or restore", () => {
+      const other = { id: "arch-personal", label: "Arch", accent: "#f0a868" };
+      const sm = createMemorySessionManager(() => LM);
+      const s = sm.register({ id: "s1", cwd: "/x", source: "tui", machine: other });
+      expect(s.machine).toEqual(other);
+      sm.restore({
+        id: "r1", cwd: "/x", source: "tui", status: "ended", startedAt: 1,
+        tokensIn: 0, tokensOut: 0, cost: 0, machine: other,
+      });
+      expect(sm.get("r1")?.machine).toEqual(other);
+    });
+
+    it("leaves machine undefined on single-machine installs (no resolver / undefined)", () => {
+      const sm = createMemorySessionManager(() => undefined);
+      const s = sm.register({ id: "s1", cwd: "/x", source: "tui" });
+      expect(s.machine).toBeUndefined();
+      const sm2 = createMemorySessionManager();
+      expect(sm2.register({ id: "s2", cwd: "/x", source: "tui" }).machine).toBeUndefined();
+    });
+  });
 });
