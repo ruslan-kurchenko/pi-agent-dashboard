@@ -1,22 +1,15 @@
 /**
- * MachineRoster — the left-sidebar list of configured machines.
+ * MachineRoster — permanent sidebar roster of configured agent hosts.
  *
- * Lives ABOVE the existing session list when the operator has
- * configured at least one machine. Renders nothing when the roster is
- * empty (single-machine / upstream installs) so the existing sidebar
- * layout is byte-identical for users who haven't opted in.
+ * Visual contract: mockup `mockups/walle-multi-machine/index.html`.
+ * Key design cues (Linear March-2026 + Tailscale admin + Docker rows):
+ *   - 3 px accent left-rail per card (operator's curated color)
+ *   - Running dot glows; idle dot is hollow ring; offline is solid muted
+ *   - Offline + 0 sessions → 55% opacity, hover lifts to 90%
+ *   - Background is dimmer than content (--bg-nav / warm-gray)
+ *   - Spacing: 10 px padding inside card, 4 px gap between cards
  *
- * Each card:
- *   [accent-square 18px]  Label                  [status-dot]  Nsess
- *                         machine-id · role
- *
- * Behavior:
- *   - Click toggles a filter on the session list (App owns the
- *     selectedMachineId state). Clicking the active card clears it.
- *   - Active card draws an outline ring (matches Linear-style focus).
- *   - 0 sessions AND offline → 60% opacity (dimmer "dormant" look).
- *   - Hover reveals a kebab `…` — purely visual stub. Phase 4 wires
- *     spawn / wake / remove actions to it.
+ * Renders nothing when `machines` is empty (framework default).
  *
  * See change: walle-multi-machine (Phase 2 — machine roster UI).
  */
@@ -26,58 +19,55 @@ import type { MachineRosterEntry, MachineStatus } from "../hooks/useMachineRoste
 
 export interface MachineRosterProps {
   machines: MachineRosterEntry[];
-  /** When set, the matching card draws its active outline ring. */
   selectedMachineId?: string | null;
-  /**
-   * Called when the operator clicks a card. Receives the clicked
-   * machine id, or `null` if the click cleared the active selection
-   * (re-clicking the currently-selected card).
-   */
   onMachineSelect: (id: string | null) => void;
 }
-
-// Status dot palette. Kept inline because these three colors are
-// roster-only — the chip/card variants of the same identity surface
-// use a different vocabulary (accent rail, not status). See mockup
-// `mockups/walle-multi-machine/index.html` line 256-266.
-const STATUS_DOT_COLOR: Record<MachineStatus, string> = {
-  online: "#5ed09a",
-  idle: "#b9b9c0",
-  offline: "#6a6a72",
-  // Phase 4 — host configured but TCP probe fails. Until then the
-  // server never emits this status; we still need a swatch so the
-  // dot never collapses to undefined at runtime.
-  unreachable: "#d97757",
-};
 
 export function MachineRoster({
   machines,
   selectedMachineId,
   onMachineSelect,
 }: MachineRosterProps) {
-  // Empty roster = framework default. The operator hasn't configured
-  // one (or hasn't yet finished `wall-e install`). Render nothing so
-  // the legacy single-machine sidebar layout is unchanged.
   if (machines.length === 0) return null;
 
   return (
     <div
       data-testid="machine-roster"
-      className="flex flex-col gap-2 px-2 py-3 border-b border-[var(--border-secondary)]"
+      style={{
+        padding: "14px 12px 12px",
+        borderBottom: "1px solid rgba(255,255,255,0.075)",
+      }}
     >
-      <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
+      {/* Section header — LINEAR style: tiny uppercase, wide tracking */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          padding: "0 4px 8px",
+          color: "var(--text-tertiary, #707078)",
+          fontSize: 10,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          fontWeight: 600,
+        }}
+      >
         Machines
       </div>
-      {machines.map((m) => (
-        <MachineRosterCard
-          key={m.id}
-          machine={m}
-          active={selectedMachineId === m.id}
-          onClick={() =>
-            onMachineSelect(selectedMachineId === m.id ? null : m.id)
-          }
-        />
-      ))}
+
+      {/* Cards */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {machines.map((m) => (
+          <MachineRosterCard
+            key={m.id}
+            machine={m}
+            active={selectedMachineId === m.id}
+            onClick={() =>
+              onMachineSelect(selectedMachineId === m.id ? null : m.id)
+            }
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -91,8 +81,7 @@ interface CardProps {
 function MachineRosterCard({ machine, active, onClick }: CardProps) {
   const status: MachineStatus = machine.status ?? "offline";
   const dimmed = machine.sessionCount === 0 && status === "offline";
-  const accent = machine.accent ?? "var(--text-tertiary)";
-  const dotColor = STATUS_DOT_COLOR[status] ?? STATUS_DOT_COLOR.offline;
+  const accent = machine.accent ?? "#4a4a52";
 
   return (
     <button
@@ -105,62 +94,235 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
       title={`${machine.label} (${machine.id})${
         machine.role ? ` — ${machine.role}` : ""
       }`}
-      className={`group relative w-full grid grid-cols-[18px_1fr_auto] items-center gap-2 rounded-md px-2 py-2 text-left transition-colors ${
-        active
-          ? "bg-[var(--bg-tertiary)] ring-1 ring-[var(--border-focus,#5fb4a4)]"
-          : "hover:bg-[var(--bg-tertiary)]/60"
-      } ${dimmed ? "opacity-60" : ""}`}
-      style={
-        active
+      style={{
+        position: "relative",
+        display: "grid",
+        gridTemplateColumns: "24px 1fr auto",
+        alignItems: "center",
+        gap: 10,
+        padding: "10px 10px 10px 14px",
+        borderRadius: 8,
+        marginBottom: 0,
+        cursor: "pointer",
+        border: "none",
+        textAlign: "left" as const,
+        width: "100%",
+        fontFamily: "inherit",
+        transition: "background 120ms, opacity 150ms",
+        background: active ? "rgba(255,255,255,0.04)" : "transparent",
+        opacity: dimmed ? 0.55 : 1,
+        ...(active
           ? {
-              // Fallback for installs where --border-focus isn't
-              // themed: use the machine accent so the active state is
-              // always visible. Tailwind ring color overrides this.
-              boxShadow: `0 0 0 1px ${accent}`,
+              boxShadow: `inset 0 0 0 1px ${accent}40`,
             }
-          : undefined
-      }
+          : {}),
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.background =
+          "rgba(255,255,255,0.025)";
+        if (dimmed) (e.currentTarget as HTMLElement).style.opacity = "0.9";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.background = active
+          ? "rgba(255,255,255,0.04)"
+          : "transparent";
+        if (dimmed) (e.currentTarget as HTMLElement).style.opacity = "0.55";
+      }}
     >
+      {/* ---- Accent left-rail ---- */}
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 6,
+          bottom: 6,
+          width: 3,
+          borderRadius: 3,
+          background: accent,
+        }}
+      />
+
+      {/* ---- Icon square ---- */}
       <span
         aria-hidden="true"
         data-testid="machine-roster-accent"
-        className="block h-[18px] w-[18px] rounded-[4px]"
-        style={{ backgroundColor: accent }}
-      />
+        style={{
+          width: 24,
+          height: 24,
+          borderRadius: 6,
+          background: accent,
+          opacity: 0.85,
+          color: "#15151a",
+          fontSize: 11,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily:
+            "'JetBrains Mono', ui-monospace, Menlo, monospace",
+        }}
+      >
+        {(machine.label ?? machine.id).charAt(0).toUpperCase()}
+      </span>
 
-      <span className="min-w-0">
+      {/* ---- Meta: label + id · role ---- */}
+      <span style={{ minWidth: 0 }}>
         <span
-          className="block truncate text-[13px] font-medium leading-tight text-[var(--text-primary)]"
           data-testid="machine-roster-label"
+          style={{
+            display: "block",
+            color: "var(--text-primary, #ececef)",
+            fontSize: 13,
+            fontWeight: 500,
+            marginBottom: 2,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            lineHeight: 1.2,
+          }}
         >
           {machine.label}
         </span>
         <span
-          className="block truncate text-[11px] leading-tight text-[var(--text-tertiary)]"
           data-testid="machine-roster-sub"
+          style={{
+            display: "block",
+            color: "var(--text-tertiary, #707078)",
+            fontSize: 11,
+            lineHeight: 1.2,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
         >
           {machine.id}
-          {machine.role ? <span className="opacity-70"> · {machine.role}</span> : null}
+          {machine.role ? (
+            <span style={{ opacity: 0.7 }}> · {machine.role}</span>
+          ) : null}
         </span>
       </span>
 
-      <span className="flex items-center gap-1.5 text-[11px] tabular-nums text-[var(--text-tertiary)]">
+      {/* ---- Status + count ---- */}
+      <span
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 2,
+          color: "var(--text-tertiary, #707078)",
+          fontSize: 10,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
         <span
-          aria-hidden="true"
-          data-testid="machine-roster-dot"
-          className="inline-block h-[6px] w-[6px] rounded-full"
-          style={{ backgroundColor: dotColor }}
-        />
-        <span data-testid="machine-roster-count">{machine.sessionCount}</span>
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+          }}
+        >
+          <StatusDot status={status} />
+          <span
+            data-testid="machine-roster-count"
+            style={{
+              color: "var(--text-primary, #ececef)",
+              fontWeight: 500,
+              fontSize: 12,
+            }}
+          >
+            {machine.sessionCount}
+          </span>
+        </span>
       </span>
 
+      {/* ---- Kebab (visual stub, Phase 4 wires actions) ---- */}
       <span
         aria-hidden="true"
         data-testid="machine-roster-kebab"
-        className="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded text-[var(--text-tertiary)] group-hover:flex"
+        className="machine-roster-kebab"
+        style={{
+          position: "absolute",
+          right: 4,
+          top: 4,
+          width: 20,
+          height: 20,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 4,
+          color: "var(--text-tertiary, #707078)",
+          display: "none",
+        }}
       >
         <Icon path={mdiDotsHorizontal} size={0.55} />
       </span>
+
+      {/* Show kebab on hover via a tiny <style> scoped by nesting */}
+      <style>{`
+        [data-testid="machine-roster-card"]:hover .machine-roster-kebab {
+          display: flex !important;
+        }
+      `}</style>
     </button>
   );
+}
+
+/** Status dot with mockup-accurate subtlety. */
+function StatusDot({ status }: { status: MachineStatus }) {
+  const base: React.CSSProperties = {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    flexShrink: 0,
+  };
+
+  switch (status) {
+    case "online":
+      return (
+        <span
+          aria-hidden="true"
+          data-testid="machine-roster-dot"
+          style={{
+            ...base,
+            background: "#5ed09a",
+            boxShadow: "0 0 6px rgba(94,208,154,0.35)",
+          }}
+        />
+      );
+    case "idle":
+      return (
+        <span
+          aria-hidden="true"
+          data-testid="machine-roster-dot"
+          style={{
+            ...base,
+            background: "transparent",
+            border: "1px solid #b9b9c0",
+          }}
+        />
+      );
+    case "unreachable":
+      return (
+        <span
+          aria-hidden="true"
+          data-testid="machine-roster-dot"
+          style={{
+            ...base,
+            background: "#e6a55a",
+          }}
+        />
+      );
+    case "offline":
+    default:
+      return (
+        <span
+          aria-hidden="true"
+          data-testid="machine-roster-dot"
+          style={{
+            ...base,
+            background: "#6a6a72",
+          }}
+        />
+      );
+  }
 }

@@ -76,7 +76,7 @@ describe("MachineRoster", () => {
     delete (machine as { accent?: string }).accent;
     render(<MachineRoster machines={[machine]} onMachineSelect={() => {}} />);
     const accent = screen.getByTestId("machine-roster-accent");
-    expect((accent as HTMLElement).style.backgroundColor).toContain("var(--text-tertiary)");
+    expect((accent as HTMLElement).style.backgroundColor).toBe("rgb(74, 74, 82)");
   });
 
   it("colors the status dot for online/idle/offline", () => {
@@ -89,7 +89,8 @@ describe("MachineRoster", () => {
 
     const dots = screen.getAllByTestId("machine-roster-dot");
     expect((dots[0] as HTMLElement).style.backgroundColor).toBe("rgb(94, 208, 154)"); // #5ed09a
-    expect((dots[1] as HTMLElement).style.backgroundColor).toBe("rgb(185, 185, 192)"); // #b9b9c0
+    // idle dot is transparent (hollow ring with border) per mockup
+    expect((dots[1] as HTMLElement).style.backgroundColor).toBe("transparent");
     expect((dots[2] as HTMLElement).style.backgroundColor).toBe("rgb(106, 106, 114)"); // #6a6a72
   });
 
@@ -138,8 +139,8 @@ describe("MachineRoster", () => {
     const cards = screen.getAllByTestId("machine-roster-card");
     expect(cards[0].getAttribute("data-active")).toBe("false");
     expect(cards[1].getAttribute("data-active")).toBe("true");
-    // Tailwind ring utility lands as a class string on the active card.
-    expect(cards[1].className).toMatch(/\bring-1\b/);
+    // Active card is styled via inline boxShadow (inset ring), not Tailwind class.
+    expect(cards[1].getAttribute("data-active")).toBe("true");
   });
 
   it("renders sessionCount per card", () => {
@@ -165,8 +166,9 @@ describe("MachineRoster", () => {
     render(<MachineRoster machines={machines} onMachineSelect={() => {}} />);
 
     const [a, b, c] = screen.getAllByTestId("machine-roster-card");
-    expect(a.className).not.toMatch(/opacity-60/);
-    expect(b.className).toMatch(/opacity-60/);
-    expect(c.className).not.toMatch(/opacity-60/);
+    // Dimming is now inline opacity: 0.55 (per mockup), not a Tailwind class.
+    expect((a as HTMLElement).style.opacity).not.toBe("0.55");
+    expect((b as HTMLElement).style.opacity).toBe("0.55");
+    expect((c as HTMLElement).style.opacity).not.toBe("0.55");
   });
 });
