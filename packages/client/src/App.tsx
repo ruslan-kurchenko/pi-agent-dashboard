@@ -3,9 +3,10 @@ import { useRoute, useLocation, useSearchParams, Redirect, Switch, Route } from 
 import { useWebSocket } from "./hooks/useWebSocket.js";
 import { setInitSender } from "./lib/worktree-init-bus.js";
 import { useSidebarState } from "./hooks/useSidebarState.js";
+import { useCollapsibleColumn } from "./hooks/useCollapsibleColumn.js";
 import { useDocumentTitle } from "./hooks/useDocumentTitle.js";
 import { SessionList } from "./components/SessionList.js";
-import { MachineRoster } from "./components/MachineRoster.js";
+import { CollapsibleRosterColumn } from "./components/CollapsibleRosterColumn.js";
 import { useMachineRoster } from "./hooks/useMachineRoster.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { ResizableSidebar } from "./components/ResizableSidebar.js";
@@ -414,6 +415,7 @@ export default function App() {
   const folderTermCwd = folderTermMatch ? decodeFolderPath(folderTermParams?.encodedCwd ?? "") : null;
   const folderEditorCwd = folderEditorMatch ? decodeFolderPath(folderEditorParams?.encodedCwd ?? "") : null;
   const sidebar = useSidebarState();
+  const rosterColumn = useCollapsibleColumn("dashboard:roster-collapsed");
   const chatViewRef = useRef<ChatViewHandle>(null);
   const isMobile = useMobile();
   const installPrompt = useInstallPrompt();
@@ -1918,23 +1920,14 @@ export default function App() {
     <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
       {commandPalette}
       {/* walle-multi-machine: 3-column layout (roster | sessions | content).
-          The machine roster is its own narrow fixed-width column so it's
-          always visible without scrolling. The session list lives in the
-          resizable sidebar as before. On mobile, both collapse into the
-          overlay. */}
-      {rosterMachines.length > 0 && (
-        <div
-          className="hidden md:flex flex-col border-r"
-          style={{
-            width: 220,
-            minWidth: 220,
-            background: 'var(--bg-secondary)',
-            borderColor: 'var(--border-primary)',
-          }}
-        >
-          {machineRoster}
-        </div>
-      )}
+          Both the roster column and the session sidebar collapse independently
+          to icon-strip / narrow widths, with state persisted to localStorage. */}
+      <CollapsibleRosterColumn
+        column={rosterColumn}
+        machines={rosterMachines}
+        selectedMachineId={selectedMachineId}
+        onMachineSelect={setSelectedMachineId}
+      />
       <div className="hidden md:flex">
         <ResizableSidebar sidebar={sidebar}>
           {sessionList}
