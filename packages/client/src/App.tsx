@@ -1917,9 +1917,26 @@ export default function App() {
   return apiProvider(
     <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
       {commandPalette}
+      {/* walle-multi-machine: 3-column layout (roster | sessions | content).
+          The machine roster is its own narrow fixed-width column so it's
+          always visible without scrolling. The session list lives in the
+          resizable sidebar as before. On mobile, both collapse into the
+          overlay. */}
+      {rosterMachines.length > 0 && (
+        <div
+          className="hidden md:flex flex-col border-r"
+          style={{
+            width: 220,
+            minWidth: 220,
+            background: 'var(--bg-secondary)',
+            borderColor: 'var(--border-primary)',
+          }}
+        >
+          {machineRoster}
+        </div>
+      )}
       <div className="hidden md:flex">
         <ResizableSidebar sidebar={sidebar}>
-          {machineRoster}
           {sessionList}
         </ResizableSidebar>
       </div>
