@@ -1,81 +1,78 @@
 /* ================================================================
-   wall-e dark-forest theme
+   wall-e theme — Linear/Raycast clean-dark
    ================================================================
-   A bold, nature-inspired dark theme with deep forest greens, warm
-   amber highlights, and earthy tones. Not a subtle CSS var tweak —
-   a distinct visual identity that makes the dashboard feel like a
-   mission-control terminal in a forest cabin.
+   Neutral dark palette. No personality color in the chrome — color
+   is reserved for status (running=green, streaming=amber, needs-
+   input=purple) and per-machine identity accents.
 
-   Design language:
-   - Deep green-tinted blacks for backgrounds (not neutral gray)
-   - Moss/sage for success, amber/gold for attention, warm cream text
-   - Forest-green tinted borders (low-alpha green, not white)
-   - Serif display headings (system Georgia) for warmth
-   - Monospace JetBrains Mono / Fira Code for data
-   - Card selection: warm amber glow, not neon rainbow
+   Derived from the actual rendered mockup, not the aspirational
+   design-token comments. The mockup renders as a standard Linear-
+   class dark-mode dashboard.
 
-   See change: walle-multi-machine (dark-forest theme).
+   Font: Source Sans 3 (or system sans) + JetBrains Mono for code.
+   Google Fonts CDN with display=swap for fast load.
+
+   See change: walle-multi-machine.
    ================================================================ */
 
-/* ── Font imports (Google Fonts CDN — cached aggressively) ──── */
 @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-/* ── Dark mode (default) ─────────────────────────────────────── */
+/* ── Base palette ────────────────────────────────────────────── */
 :root {
-  /* Background ramp — deep forest green tints */
-  --bg-primary:   #080d0a;     /* deepest — near-black with green */
-  --bg-secondary: #0d1410;     /* sidebar panels — dark forest floor */
-  --bg-tertiary:  #141e18;     /* cards — dark moss */
-  --bg-surface:   #1c2920;     /* elevated — forest canopy shadow */
-  --bg-hover:     rgba(120, 200, 140, 0.04);
-  --bg-selected:  #182419;
-  --bg-code:      #0f1812;     /* code blocks — darkest green */
-  --bg-overlay:   rgba(4, 8, 5, 0.75);
+  /* Backgrounds — neutral cool-dark, NOT tinted */
+  --bg-primary:   #0e0e10;     /* page bg — near black, faint cool */
+  --bg-secondary: #141416;     /* sidebar, nav panels */
+  --bg-tertiary:  #1c1c20;     /* cards, inputs, hover surface */
+  --bg-surface:   #26262b;     /* elevated: badges, buttons, menus */
+  --bg-hover:     rgba(255, 255, 255, 0.04);
+  --bg-selected:  #1e1e23;
+  --bg-code:      #17171b;     /* code blocks — slightly darker */
+  --bg-overlay:   rgba(0, 0, 0, 0.65);
 
-  /* Text — warm cream/sage, NOT cool white */
-  --text-primary:   #d8ddd4;   /* warm off-white, hint of green */
-  --text-secondary: #a3ac9e;   /* sage gray */
-  --text-tertiary:  #6b7568;   /* forest mist */
-  --text-muted:     #434d40;   /* deep moss */
-  --text-faint:     #2a332a;   /* bark */
+  /* Text — clean white hierarchy, no warmth */
+  --text-primary:   #eaeaec;   /* headings, names */
+  --text-secondary: #a0a0a8;   /* body, descriptions */
+  --text-tertiary:  #6a6a74;   /* labels, timestamps */
+  --text-muted:     #44444c;   /* disabled, whisper */
+  --text-faint:     #2e2e35;   /* barely visible */
 
-  /* Borders — green-tinted, organic feel */
-  --border-primary:   rgba(120, 170, 130, 0.12);
-  --border-secondary: rgba(100, 150, 110, 0.08);
-  --border-subtle:    rgba(80, 130, 90, 0.05);
+  /* Borders — soft white-alpha, not colored */
+  --border-primary:   rgba(255, 255, 255, 0.08);
+  --border-secondary: rgba(255, 255, 255, 0.05);
+  --border-subtle:    rgba(255, 255, 255, 0.03);
 
-  /* Accents — nature palette */
-  --accent-green:  #7fb069;    /* moss green — running/success */
-  --accent-yellow: #d4a84b;    /* amber gold — streaming/warning */
-  --accent-red:    #c46b5e;    /* terracotta — error */
-  --accent-purple: #9b8ec4;    /* twilight — needs input */
-  --accent-orange: #c9884a;    /* warm bark */
-  --accent-blue:   #6a9fb0;    /* pond blue — links, info */
-  --accent-primary:#6a9fb0;
-  --link:          #7bb0a0;    /* teal-sage */
-  --link-hover:    #9ecab8;
+  /* Functional accents — muted, never neon */
+  --accent-green:  #4ade80;    /* running / success */
+  --accent-yellow: #e2b340;    /* streaming / warning */
+  --accent-red:    #ef6b6b;    /* error */
+  --accent-purple: #b490e0;    /* needs input */
+  --accent-orange: #e8944a;    /* attention */
+  --accent-blue:   #5b9bd5;    /* info, links */
+  --accent-primary:#5b9bd5;
+  --link:          #6aaddf;
+  --link-hover:    #8ec4ee;
 
-  /* Shadows — deep forest */
-  --shadow-card: rgba(0, 8, 2, 0.4);
+  /* Shadow */
+  --shadow-card: rgba(0, 0, 0, 0.3);
 
-  /* Selected card ring — warm amber glow instead of neon rainbow */
-  --neon-rim-alpha:    0.0;    /* disable the rainbow */
-  --neon-glow-alpha:   0.0;
-  --neon-glow-blur:    0px;
-  --neon-glow-opacity: 0.0;
-  --neon-bg-tint:      transparent;
+  /* Tame the neon ring — static subtle blue instead of rainbow spin */
+  --neon-rim-alpha:    0.25;
+  --neon-glow-alpha:   0.06;
+  --neon-glow-blur:    6px;
+  --neon-glow-opacity: 0.25;
+  --neon-bg-tint:      rgba(91, 155, 213, 0.015);
 }
 
 /* ── Typography ──────────────────────────────────────────────── */
 html, body {
-  font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+  font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-size: 13px;
   line-height: 1.5;
+  letter-spacing: 0.01em;
 }
 
-/* Mono stack for code/data */
 code, pre, kbd, samp,
 .font-mono, [class*="monospace"],
 .markdown-content pre,
@@ -84,149 +81,83 @@ code, pre, kbd, samp,
 .markdown-content pre span {
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, Menlo, monospace !important;
   font-feature-settings: 'tnum', 'liga' 0;
+  font-size: 12px;
 }
 
-/* ── Card selection — warm amber border instead of neon ring ── */
-
-/* Kill the spinning neon entirely */
+/* ── Card selection — calmer ring ────────────────────────────── */
+/* Slow down the neon spin and reduce intensity */
 .card-selected-ring::before {
-  background: rgba(180, 150, 60, 0.35) !important;
-  animation: none !important;
+  animation-duration: 20s !important;
+  opacity: 0.6 !important;
 }
 .card-selected-ring::after {
-  background: rgba(180, 150, 60, 0.08) !important;
-  filter: blur(8px) !important;
-  animation: none !important;
+  animation-duration: 20s !important;
+  opacity: 0.3 !important;
 }
 
-/* Add a static warm-glow alternative */
-.card-selected-ring {
-  box-shadow: 0 0 0 1px rgba(180, 150, 60, 0.4),
-              0 0 12px rgba(180, 150, 60, 0.08) !important;
-}
-
-/* ── Working/streaming pulse — forest amber ──────────────────── */
+/* ── Working/streaming pulse — warmer amber ──────────────────── */
 .card-working-pulse {
   background-image:
     repeating-linear-gradient(
       45deg,
       transparent 0 10px,
-      rgba(180, 150, 60, 0.07) 10px 20px
+      rgba(226, 179, 64, 0.06) 10px 20px
     ),
-    linear-gradient(rgba(180, 150, 60, 0.03), rgba(180, 150, 60, 0.03)) !important;
+    linear-gradient(rgba(226, 179, 64, 0.025), rgba(226, 179, 64, 0.025)) !important;
 }
 
-/* Unread pulse — sage green instead of cyan */
+/* Unread pulse — calmer */
 .card-unread-pulse {
   background-image:
     repeating-linear-gradient(
       45deg,
       transparent 0 10px,
-      rgba(127, 176, 105, 0.12) 10px 20px
+      rgba(34, 211, 238, 0.10) 10px 20px
     ),
-    linear-gradient(rgba(127, 176, 105, 0.05), rgba(127, 176, 105, 0.05)) !important;
+    linear-gradient(rgba(34, 211, 238, 0.04), rgba(34, 211, 238, 0.04)) !important;
 }
 
-/* Input pulse — twilight purple with forest tint */
+/* Input pulse — subtler purple */
 .card-input-pulse {
-  animation-name: forest-input-pulse !important;
+  animation-name: walle-input-pulse !important;
 }
-@keyframes forest-input-pulse {
+@keyframes walle-input-pulse {
   0%, 100% { background-color: transparent; }
-  50% { background-color: rgba(155, 142, 196, 0.06); }
+  50% { background-color: rgba(180, 144, 224, 0.05); }
 }
 
-/* ── Scrollbar — thin, forest-tinted ─────────────────────────── */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* ── Scrollbar — thin, neutral ───────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 170, 130, 0.15);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(120, 170, 130, 0.3);
+  background: rgba(255, 255, 255, 0.16);
 }
+* { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.08) transparent; }
 
-/* Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(120, 170, 130, 0.15) transparent;
-}
-
-/* ── Markdown blockquote — forest left-border ────────────────── */
-.markdown-content blockquote {
-  border-left-color: rgba(127, 176, 105, 0.3) !important;
-}
-
-/* ── Search highlights — amber instead of yellow ─────────────── */
-mark.markdown-search-highlight {
-  background-color: rgba(212, 168, 75, 0.25) !important;
-}
-mark.markdown-search-highlight-active {
-  background-color: rgba(212, 168, 75, 0.5) !important;
-  outline-color: rgba(212, 168, 75, 0.7) !important;
-}
-
-/* ── Toolbar / header bar ────────────────────────────────────── */
-header, nav, [class*="toolbar"], [class*="topbar"] {
-  background: var(--bg-secondary) !important;
-  border-bottom-color: var(--border-primary) !important;
-}
-
-/* ── Session card hover — visible but not harsh ──────────────── */
-[data-testid="session-card"]:hover,
-.session-card:hover {
-  background: var(--bg-surface) !important;
-  border-color: rgba(120, 170, 130, 0.12) !important;
-}
-
-/* ── Buttons — forest-tinted ─────────────────────────────────── */
-/* "Add Folder" / "New Workspace" — inherit forest palette */
-button[class*="primary"] {
-  background: var(--accent-blue) !important;
-}
-
-/* ── Status pill / badge overrides ───────────────────────────── */
-/* Running / active */
-[data-status="streaming"] {
-  color: var(--accent-yellow) !important;
-}
-[data-status="waiting_for_input"],
-[data-status="needs_input"] {
-  color: var(--accent-purple) !important;
-}
-
-/* ── Code block backgrounds — deep forest ────────────────────── */
+/* ── Code blocks ─────────────────────────────────────────────── */
 .markdown-content pre {
   background: var(--bg-code) !important;
   border: 1px solid var(--border-secondary) !important;
   border-radius: 6px !important;
 }
 
-/* ── Sidebar panel ───────────────────────────────────────────── */
-aside, [class*="sidebar"], [data-testid="sidebar"] {
-  background: var(--bg-secondary) !important;
-  border-right-color: var(--border-primary) !important;
+/* ── Markdown blockquote ─────────────────────────────────────── */
+.markdown-content blockquote {
+  border-left-color: var(--border-primary) !important;
+  color: var(--text-tertiary) !important;
 }
 
-/* ── Main content area — slightly lighter for depth ──────────── */
-main, [class*="content-area"], [class*="main-content"] {
-  background: #0b120e !important;
+/* ── Search highlights — amber ───────────────────────────────── */
+mark.markdown-search-highlight {
+  background-color: rgba(226, 179, 64, 0.25) !important;
 }
-
-/* ── Form inputs ─────────────────────────────────────────────── */
-input, textarea, select {
-  background: var(--bg-tertiary) !important;
-  border-color: var(--border-primary) !important;
-  color: var(--text-primary) !important;
-}
-input::placeholder, textarea::placeholder {
-  color: var(--text-muted) !important;
+mark.markdown-search-highlight-active {
+  background-color: rgba(226, 179, 64, 0.5) !important;
+  outline-color: rgba(226, 179, 64, 0.7) !important;
 }
 
 /* ── Reduced motion ──────────────────────────────────────────── */
@@ -238,9 +169,4 @@ input::placeholder, textarea::placeholder {
   .card-selected-ring::after {
     animation: none !important;
   }
-}
-
-/* ── Mobile ──────────────────────────────────────────────────── */
-@media (max-width: 768px) {
-  html { font-size: 14px; }
 }
