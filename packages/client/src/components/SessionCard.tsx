@@ -21,6 +21,7 @@ import { getSessionDisplayName } from "../lib/session-display-name.js";
 import { formatRelativeTime, formatTokens } from "../lib/format.js";
 import { selectBadgeTimestamp } from "../lib/session-card-time.js";
 import type { DetectedEditor } from "../lib/editor-api.js";
+import { MachineChip } from "./MachineChip.js";
 import { ContextUsageBar } from "./ContextUsageBar.js";
 import type { ContextUsageInfo } from "./SessionList.js";
 import type { OpenSpecData, OpenSpecChange, OpenSpecGroup } from "@blackbelt-technology/pi-dashboard-shared/types.js";
@@ -499,6 +500,10 @@ export function SessionCard({
           >
             <Icon path={sourceIcons[session.source] ?? mdiConsoleLine} size={0.5} />
           </span>
+          {/* walle multi-machine: machine identity badge. Renders nothing
+              when session.machine is absent (single-machine installs).
+              See change: walle-multi-machine. */}
+          <MachineChip machine={session.machine} variant="card" />
           <span className="text-sm truncate flex-1">
             {getSessionDisplayName(session)}
           </span>

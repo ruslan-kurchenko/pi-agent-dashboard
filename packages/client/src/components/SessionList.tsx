@@ -35,6 +35,7 @@ import {
   removeLegacyHiddenSessions,
 } from "../lib/session-filter-storage.js";
 import { SessionCard, GroupGitInfo, EditorButtons, branchCache } from "./SessionCard.js";
+import { MachineChip } from "./MachineChip.js";
 import { PlaceholderSessionCard } from "./PlaceholderSessionCard.js";
 import { FolderOpenSpecSection } from "./FolderOpenSpecSection.js";
 import { SidebarFolderSectionSlot } from "@blackbelt-technology/dashboard-plugin-runtime";
@@ -613,9 +614,19 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
             onClick={() => handleToggleCollapse(group.cwd)}
             title={isCollapsed ? "Expand folder" : "Collapse folder"}
           >
-            <span className="text-xs font-medium text-[var(--text-secondary)] truncate flex items-center gap-1">
+            <span className="text-xs font-medium text-[var(--text-secondary)] truncate flex items-center gap-1 min-w-0">
               <Icon path={isCollapsed ? mdiFolder : mdiFolderOpen} size={0.5} className="shrink-0" /> {dirName}
             </span>
+            {/* walle multi-machine: identify the host owning this cwd.
+                Picks the first session's machine in this group. When
+                multiple machines own sessions for the SAME cwd (rare —
+                cwd is unique per machine in practice), only the first
+                is shown; the per-card chip disambiguates the rest.
+                See change: walle-multi-machine. */}
+            <MachineChip
+              machine={group.sessions.find((s) => s.machine)?.machine}
+              variant="folder"
+            />
             <span className="text-[10px] text-[var(--text-muted)]">({group.sessions.length})</span>
             {/* Pin/Unpin toggle. Hidden inside a workspace container — pin
                 is irrelevant for visibility/ordering there. The pin state
