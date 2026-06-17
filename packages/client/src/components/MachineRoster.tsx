@@ -94,7 +94,7 @@ export function MachineRoster({
         </div>
         {selected && selected.messageable && (
           <div style={{ padding: "0 12px 4px" }}>
-            <MachineComposer machine={selected} />
+            <MachineComposer key={selected.id} machine={selected} />
           </div>
         )}
       </div>
@@ -368,17 +368,25 @@ function StatusDot({ status }: { status: MachineStatus }) {
 }
 
 /**
- * walle-multi-machine: inline composer to send an operator prompt to a
- * messageable machine's wall-e agent (the local daemon's home agent). POSTs
- * to /api/machines/:id/message, which forwards to the daemon's `dashboard`
- * channel. The agent runs in a tracked, sandboxed container that becomes
- * live-visible in the session list above (machine-tagged). Re-sending here
- * is "continue" — the agent's per-thread session resumes.
+ * walle-multi-machine: inline composer to start AND continue a conversation
+ * with a messageable machine's wall-e agent (the daemon's home agent). POSTs
+ * to /api/machines/:id/message → the daemon's `dashboard` channel.
+ *
+ * STICKY THREAD = reliable continue. The first send mints a wall-e thread id
+ * (returned by the server); subsequent sends reuse it, so the agent's
+ * per-thread session RESUMES with full context — instead of the dashboard's
+ * send_prompt/auto-resume path, which is wrong for daemon sessions (their
+ * containers exit between turns, so the dashboard sees them ended and would
+ * spawn a bare host pi). The "↺ New" control starts a fresh conversation.
+ * The live/archived omp sessions for this thread appear in the list above for
+ * monitoring; this composer is the conversation's input.
  */
 function MachineComposer({ machine }: { machine: MachineRosterEntry }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const continuing = threadId !== null;
 
   const send = async (): Promise<void> => {
     const t = text.trim();
@@ -389,14 +397,16 @@ function MachineComposer({ machine }: { machine: MachineRosterEntry }) {
       const r = await fetch(`/api/machines/${encodeURIComponent(machine.id)}/message`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: t }),
+        body: JSON.stringify(threadId ? { text: t, threadId } : { text: t }),
       });
       const j = (await r.json().catch(() => null)) as
-        | { success?: boolean; error?: string }
+        | { success?: boolean; error?: string; data?: { threadId?: string } }
         | null;
       if (r.ok && j?.success) {
+        const tid = j.data?.threadId;
+        if (tid) setThreadId(tid);
         setText("");
-        setNote("Sent — session will appear above shortly.");
+        setNote(threadId ? "Continued — the session above resumes." : "Started — the session appears above.");
       } else {
         setNote(j?.error ?? `Failed (${r.status})`);
       }
@@ -409,6 +419,21 @@ function MachineComposer({ machine }: { machine: MachineRosterEntry }) {
 
   return (
     <div style={{ padding: "6px 4px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
+      {continuing && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 10, color: "var(--text-tertiary, #707078)" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: machine.accent || "#5fb4a4" }} />
+            Continuing conversation
+          </span>
+          <button
+            onClick={() => { setThreadId(null); setNote(null); }}
+            data-testid="machine-composer-new"
+            style={{ fontSize: 10, color: "var(--text-tertiary, #707078)", background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}
+          >
+            ↺ New
+          </button>
+        </div>
+      )}
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -418,7 +443,7 @@ function MachineComposer({ machine }: { machine: MachineRosterEntry }) {
             void send();
           }
         }}
-        placeholder={`Ask ${machine.label}…  (⌘/Ctrl+Enter)`}
+        placeholder={continuing ? `Continue with ${machine.label}…  (⌘/Ctrl+Enter)` : `Ask ${machine.label}…  (⌘/Ctrl+Enter)`}
         rows={2}
         disabled={busy}
         data-testid="machine-composer-input"
@@ -452,7 +477,7 @@ function MachineComposer({ machine }: { machine: MachineRosterEntry }) {
             opacity: text.trim().length === 0 ? 0.5 : 1,
           }}
         >
-          {busy ? "Sending…" : "Send"}
+          {busy ? "Sending…" : continuing ? "Continue" : "Start"}
         </button>
       </div>
     </div>
