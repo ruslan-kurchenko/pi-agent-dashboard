@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Icon } from "@mdi/react";
-import { mdiPencilOutline, mdiArrowLeft, mdiPaperclip, mdiRefresh, mdiLinkOff, mdiPlay, mdiFileCompare, mdiHeadLightbulb, mdiViewGridOutline, mdiPlayCircleOutline, mdiSourceFork } from "@mdi/js";
+import { mdiPencilOutline, mdiArrowLeft, mdiPaperclip, mdiRefresh, mdiLinkOff, mdiPlay, mdiFileCompare, mdiHeadLightbulb, mdiViewGridOutline, mdiPlayCircleOutline, mdiSourceFork, mdiConsole, mdiCheck } from "@mdi/js";
 import type { DashboardSession, OpenSpecChange, CommandInfo, ImageContent } from "@blackbelt-technology/pi-dashboard-shared/types.js";
 import type { SessionState } from "../lib/event-reducer.js";
 import type { DetectedEditor } from "../lib/editor-api.js";
@@ -492,6 +492,13 @@ export function SessionHeader({ session, state, onRename, showBack, onBack, mobi
       ) : (
         <span className="text-[var(--text-muted)]">{formatDuration(duration)}</span>
       )}
+      {/* walle-multi-machine: copy a command to resume this session in a
+          terminal on its machine — the "start on dashboard → continue in the
+          laptop terminal" bridge. Laptop sessions only: daemon sessions run in
+          containers (cwd /workspace*) with no human terminal to resume into. */}
+      {session?.sessionFile && !session.cwd?.startsWith("/workspace") && (
+        <ResumeInTerminalButton session={session} />
+      )}
       {onRefresh && (
         <button
           onClick={() => { onRefresh(); setRefreshing(true); setTimeout(() => setRefreshing(false), 500); }}
@@ -519,5 +526,38 @@ export function SessionHeader({ session, state, onRename, showBack, onBack, mobi
           /flows:delete) and SessionFlowActionsClaim. See change:
           pluginize-flows-via-registry. */}
     </div>
+  );
+}
+
+/**
+ * walle-multi-machine: copy a shell command to resume this session in a
+ * terminal on its own machine — e.g. start a session on a laptop from the
+ * dashboard, then pick it up in the laptop terminal with full context.
+ * omp accepts `--resume <id-prefix>`; the session-dir is the machine's normal
+ * omp config, so the id resolves there. Pure clipboard action — no spawn.
+ */
+function ResumeInTerminalButton({ session }: { session: DashboardSession }) {
+  const [copied, setCopied] = useState(false);
+  const cmd = `cd ${session.cwd} && omp --resume ${session.id}`;
+  const onClick = () => {
+    void navigator.clipboard?.writeText(cmd).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      },
+      () => {},
+    );
+  };
+  const machineLabel = session.machine?.label ?? "this machine";
+  return (
+    <button
+      onClick={onClick}
+      className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-secondary)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] mr-1"
+      title={`Copy a command to resume this session in a terminal on ${machineLabel}:\n${cmd}`}
+      data-testid="header-resume-terminal-button"
+    >
+      <Icon path={copied ? mdiCheck : mdiConsole} size={0.4} className="inline mr-0.5" />
+      {copied ? "Copied" : "Terminal"}
+    </button>
   );
 }
