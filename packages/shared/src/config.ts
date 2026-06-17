@@ -153,6 +153,47 @@ export interface KnownServer {
   addedAt: string; // ISO timestamp
 }
 
+/**
+ * walle-multi-machine: operator-curated roster entry.
+ *
+ * A machine is the *host running an agent* (the daemon, this laptop,
+ * the other laptop). It is rendered on the dashboard whether the
+ * machine is currently online or not — `machines` is the persisted
+ * answer to "what hosts are configured", separate from `knownServers`
+ * which only tracks discovered remote dashboards.
+ *
+ * Liveness is derived at request time from session activity
+ * (`MachineRosterEntry.status` in rest-api.ts), not persisted here.
+ *
+ * `bridgeTokenHash` is HMAC-SHA256(secret, id) and is matched against
+ * the token in the bridge's `Authorization: Bearer …` header at
+ * gateway connect time. Loopback bridges bypass the check.
+ *
+ * See change: walle-multi-machine.
+ */
+export interface MachineEntry {
+  /** Stable identifier, kebab-case. Doubles as the machine slug. */
+  id: string;
+  /** Human-readable name shown next to the chip. */
+  label: string;
+  /** Hex color used by the chip + roster card accent. */
+  accent?: string;
+  /** "daemon" | "laptop" | "remote" — purely cosmetic, drives an icon. */
+  role?: string;
+  /** Tailscale or LAN hostname for cross-machine spawn (Phase 4). */
+  host?: string;
+  /** Dashboard port on `host` (defaults to DashboardConfig.port). */
+  port?: number;
+  /** Pi-gateway port on `host` (defaults to DashboardConfig.piPort). */
+  piPort?: number;
+  /** HMAC of the bridge token; populated by `wall-e install`. */
+  bridgeTokenHash?: string;
+  /** Free-form owner string (e.g. "Ruslan", "Alex") for multi-tenant UIs. */
+  owner?: string;
+  /** ISO timestamp the entry was first added. */
+  addedAt: string;
+}
+
 // ── Model Proxy ─────────────────────────────────────────────────────
 
 export interface ProxyApiKey {
@@ -274,6 +315,12 @@ export interface DashboardConfig {
   /** Persisted list of known remote servers */
   knownServers: KnownServer[];
   /**
+   * walle-multi-machine: operator-curated roster of agent hosts.
+   * Rendered in the dashboard sidebar regardless of online state.
+   * See change: walle-multi-machine.
+   */
+  machines: MachineEntry[];
+  /**
    * How long (ms) to wait for a spawned pi session to send `session_register`
    * before emitting a timeout warning. Default 30000 (30s). Clamped [5000, 120000].
    * See change: spawn-failure-diagnostics.
@@ -349,6 +396,7 @@ const DEFAULTS: DashboardConfig = {
   cors: { allowedOrigins: [] },
   electronMode: false,
   knownServers: [],
+  machines: [],
   askUserPromptTimeoutSeconds: DEFAULT_ASK_USER_PROMPT_TIMEOUT_SECONDS,
   reattachPlacement: DEFAULT_REATTACH_PLACEMENT,
   completedFirst: false,
@@ -581,6 +629,36 @@ function parseKnownServers(raw: any): KnownServer[] {
     }));
 }
 
+/**
+ * walle-multi-machine: lenient parser for the operator-curated machine
+ * roster. Drops entries missing the load-bearing `id`/`label`; everything
+ * else is optional and either passed through or omitted. Falls back to
+ * the current timestamp for `addedAt` so a hand-edited file stays valid.
+ * See change: walle-multi-machine.
+ */
+function parseMachines(raw: any): MachineEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: MachineEntry[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    if (typeof entry.id !== "string" || !entry.id) continue;
+    if (typeof entry.label !== "string" || !entry.label) continue;
+    out.push({
+      id: entry.id,
+      label: entry.label,
+      ...(typeof entry.accent === "string" ? { accent: entry.accent } : {}),
+      ...(typeof entry.role === "string" ? { role: entry.role } : {}),
+      ...(typeof entry.host === "string" ? { host: entry.host } : {}),
+      ...(typeof entry.port === "number" ? { port: entry.port } : {}),
+      ...(typeof entry.piPort === "number" ? { piPort: entry.piPort } : {}),
+      ...(typeof entry.bridgeTokenHash === "string" ? { bridgeTokenHash: entry.bridgeTokenHash } : {}),
+      ...(typeof entry.owner === "string" ? { owner: entry.owner } : {}),
+      addedAt: typeof entry.addedAt === "string" ? entry.addedAt : new Date().toISOString(),
+    });
+  }
+  return out;
+}
+
 function parseTrustedNetworks(raw: any): string[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter((entry: unknown) => typeof entry === "string" && entry.length > 0);
@@ -650,6 +728,7 @@ export function loadConfig(): DashboardConfig {
         : {}),
       electronMode: parsed.electronMode === true,
       knownServers: parseKnownServers(parsed.knownServers),
+      machines: parseMachines(parsed.machines),
       reattachPlacement: parseReattachPlacement(parsed.reattachPlacement),
       completedFirst: typeof parsed.completedFirst === "boolean" ? parsed.completedFirst : defaults.completedFirst,
       questionFirst: typeof parsed.questionFirst === "boolean" ? parsed.questionFirst : defaults.questionFirst,
