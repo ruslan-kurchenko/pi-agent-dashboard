@@ -236,6 +236,24 @@ export function wireEvents(deps: EventWiringDeps): void {
       return;
     }
 
+    // walle-multi-machine: cross-machine spawn failures arrive from the
+    // bridge as `spawn_on_machine_failed`. Translate to the canonical
+    // `spawn_error` so the existing browser error-banner machinery
+    // handles them without a parallel code path. Broadcast to all
+    // browsers — the originating one filters by `requestId`.
+    // See change: walle-multi-machine.
+    if (msg.type === "spawn_on_machine_failed") {
+      browserGateway.broadcastToAll({
+        type: "spawn_error",
+        cwd: msg.cwd,
+        strategy: "remote",
+        message: msg.message,
+        code: msg.code,
+        requestId: msg.requestId,
+      });
+      return;
+    }
+
     if (msg.type === "event_forward") {
       // Raw-event fan-out to plugin onEvent subscribers (live + replay).
       // Fired before the core handling so plugins see every forwarded event.
