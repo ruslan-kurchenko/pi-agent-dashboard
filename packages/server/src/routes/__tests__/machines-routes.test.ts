@@ -166,6 +166,78 @@ describe("computeRoster (pure)", () => {
     );
     for (const m of roster) expect(m.status).toBe("offline");
   });
+
+  // walle-multi-machine: machine-less sessions are the host's own scanned
+  // sessions; with localMachineId set they bucket under the host machine.
+  it("attributes machine-less sessions to localMachineId when provided", () => {
+    const now = Date.now();
+    const roster = computeRoster(
+      FIXTURE_MACHINES,
+      [makeSession({
+        id: "local-1",
+        status: "active",
+        startedAt: now - 10_000, // fresh — within the 5min online window
+      })],
+      now,
+      "walle-daemon",
+    );
+    const walle = roster.find((m) => m.id === "walle-daemon")!;
+    expect(walle.status).toBe("online");
+    expect(walle.sessionCount).toBe(1);
+    expect(walle.lastSeenAt).toBeDefined();
+    expect(roster.find((m) => m.id === "arch-personal")?.sessionCount).toBe(0);
+  });
+
+  it("ignores machine-less sessions when localMachineId is omitted", () => {
+    const now = Date.now();
+    const roster = computeRoster(
+      FIXTURE_MACHINES,
+      [makeSession({ id: "local-2", status: "active", startedAt: now })],
+      now,
+    );
+    for (const m of roster) {
+      expect(m.status).toBe("offline");
+      expect(m.sessionCount).toBe(0);
+    }
+  });
+
+  it("buckets explicit machine.id sessions even when localMachineId is set", () => {
+    const now = Date.now();
+    const roster = computeRoster(
+      FIXTURE_MACHINES,
+      [makeSession({
+        id: "tagged-1",
+        status: "active",
+        startedAt: now - 10_000,
+        machine: { id: "mac-work" },
+      })],
+      now,
+      "walle-daemon",
+    );
+    expect(roster.find((m) => m.id === "mac-work")?.sessionCount).toBe(1);
+    expect(roster.find((m) => m.id === "mac-work")?.status).toBe("online");
+    // host machine gets nothing — the session was explicitly tagged elsewhere
+    expect(roster.find((m) => m.id === "walle-daemon")?.sessionCount).toBe(0);
+  });
+
+  it("does not double-count a session whose machine.id differs from localMachineId", () => {
+    const now = Date.now();
+    const roster = computeRoster(
+      FIXTURE_MACHINES,
+      [makeSession({
+        id: "tagged-2",
+        status: "active",
+        startedAt: now - 10_000,
+        machine: { id: "arch-personal" },
+      })],
+      now,
+      "walle-daemon",
+    );
+    const total = roster.reduce((sum, m) => sum + m.sessionCount, 0);
+    expect(total).toBe(1);
+    expect(roster.find((m) => m.id === "arch-personal")?.sessionCount).toBe(1);
+    expect(roster.find((m) => m.id === "walle-daemon")?.sessionCount).toBe(0);
+  });
 });
 
 describe("GET /api/machines", () => {
@@ -224,6 +296,27 @@ describe("GET /api/machines", () => {
     expect(arch?.status).toBe("offline");
     expect(arch?.sessionCount).toBe(0);
     expect(arch?.lastSeenAt).toBeUndefined();
+  });
+
+  it("attributes machine-less sessions to process.env.WALLE_MACHINE_ID", async () => {
+    // walle-multi-machine: the route feeds WALLE_MACHINE_ID as localMachineId
+    const prev = process.env.WALLE_MACHINE_ID;
+    process.env.WALLE_MACHINE_ID = "walle-daemon";
+    try {
+      ({ app } = await makeApp([
+        makeSession({ id: "host-local", status: "active", startedAt: Date.now() }),
+      ]));
+      const res = await app.inject({ method: "GET", url: "/api/machines" });
+      const body = res.json() as ListMachinesResponse;
+      expect(body.success).toBe(true);
+      if (!body.success) return;
+      const walle = body.data!.machines.find((m) => m.id === "walle-daemon");
+      expect(walle?.status).toBe("online");
+      expect(walle?.sessionCount).toBe(1);
+    } finally {
+      if (prev === undefined) delete process.env.WALLE_MACHINE_ID;
+      else process.env.WALLE_MACHINE_ID = prev;
+    }
   });
 });
 

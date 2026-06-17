@@ -477,7 +477,16 @@ export function createPiGateway(
                         accent:
                           typeof msg.machineAccent === "string" ? msg.machineAccent : undefined,
                       }
-                    : undefined,
+                    : // walle-multi-machine: fall back to bearer-verified machineId when payload omits it
+                      connectionMachineId
+                      ? {
+                          id: connectionMachineId,
+                          label:
+                            typeof msg.machineLabel === "string" ? msg.machineLabel : undefined,
+                          accent:
+                            typeof msg.machineAccent === "string" ? msg.machineAccent : undefined,
+                        }
+                      : undefined,
               });
               console.error(
                 `[gateway] session registered: ${msg.sessionId} cwd=${msg.cwd}${connectionMachineId ? ` machineId=${connectionMachineId}` : ""}`,

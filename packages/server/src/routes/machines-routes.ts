@@ -52,10 +52,12 @@ export function computeRoster(
   machines: readonly MachineEntry[],
   sessions: readonly DashboardSession[],
   now: number = Date.now(),
+  localMachineId?: string,
 ): MachineRosterEntry[] {
   const byMachine = new Map<string, DashboardSession[]>();
   for (const s of sessions) {
-    const id = s.machine?.id;
+    // walle-multi-machine: machine-less (local) sessions belong to the host machine
+    const id = s.machine?.id ?? localMachineId;
     if (!id) continue;
     const bucket = byMachine.get(id);
     if (bucket) bucket.push(s);
@@ -169,7 +171,13 @@ export function registerMachinesRoutes(
 
   function currentRoster(): MachineRosterEntry[] {
     const cfg = loadConfig();
-    return computeRoster(cfg.machines, sessionManager.listAll());
+    // walle-multi-machine: attribute machine-less (host-scanned) sessions to this server's machine id
+    return computeRoster(
+      cfg.machines,
+      sessionManager.listAll(),
+      Date.now(),
+      process.env.WALLE_MACHINE_ID || undefined,
+    );
   }
 
   function broadcastMachinesChanged(): MachineRosterEntry[] {
