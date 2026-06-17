@@ -1,183 +1,235 @@
 /* ================================================================
-   wall-e SOTA theme override
+   wall-e dark-forest theme
    ================================================================
-   Remaps upstream pi-dashboard CSS custom properties to the curated
-   warm-gray calm-density palette from mockups/walle-multi-machine/.
+   A bold, nature-inspired dark theme with deep forest greens, warm
+   amber highlights, and earthy tones. Not a subtle CSS var tweak —
+   a distinct visual identity that makes the dashboard feel like a
+   mission-control terminal in a forest cabin.
 
-   Inspired by: Linear March-2026, Tailscale admin, GitHub Codespaces,
-   Docker Desktop session rows.
+   Design language:
+   - Deep green-tinted blacks for backgrounds (not neutral gray)
+   - Moss/sage for success, amber/gold for attention, warm cream text
+   - Forest-green tinted borders (low-alpha green, not white)
+   - Serif display headings (system Georgia) for warmth
+   - Monospace JetBrains Mono / Fira Code for data
+   - Card selection: warm amber glow, not neon rainbow
 
-   Injected via @import in index.css. Override order: this file loads
-   AFTER the base :root block, so specificity wins by cascade position.
-
-   See change: walle-multi-machine (SOTA UI).
+   See change: walle-multi-machine (dark-forest theme).
    ================================================================ */
+
+/* ── Font imports (Google Fonts CDN — cached aggressively) ──── */
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 /* ── Dark mode (default) ─────────────────────────────────────── */
 :root {
-  /* Background ramp — warmer, tighter steps than upstream */
-  --bg-primary:   #0c0c0e;     /* page — near-black with warm tint */
-  --bg-secondary: #121214;     /* sidebar panels */
-  --bg-tertiary:  #1a1a1f;     /* cards, inputs, selected items */
-  --bg-surface:   #242429;     /* badges, buttons, elevated */
-  --bg-hover:     rgba(255, 255, 255, 0.035);
-  --bg-selected:  #1e1e24;
-  --bg-code:      #16161b;     /* code blocks — dimmer than cards */
-  --bg-overlay:   rgba(0, 0, 0, 0.65);
+  /* Background ramp — deep forest green tints */
+  --bg-primary:   #080d0a;     /* deepest — near-black with green */
+  --bg-secondary: #0d1410;     /* sidebar panels — dark forest floor */
+  --bg-tertiary:  #141e18;     /* cards — dark moss */
+  --bg-surface:   #1c2920;     /* elevated — forest canopy shadow */
+  --bg-hover:     rgba(120, 200, 140, 0.04);
+  --bg-selected:  #182419;
+  --bg-code:      #0f1812;     /* code blocks — darkest green */
+  --bg-overlay:   rgba(4, 8, 5, 0.75);
 
-  /* Text — warmer whites, tighter ramp */
-  --text-primary:   #ececef;
-  --text-secondary: #a8a8b0;
-  --text-tertiary:  #707078;
-  --text-muted:     #4a4a52;
-  --text-faint:     #333338;
+  /* Text — warm cream/sage, NOT cool white */
+  --text-primary:   #d8ddd4;   /* warm off-white, hint of green */
+  --text-secondary: #a3ac9e;   /* sage gray */
+  --text-tertiary:  #6b7568;   /* forest mist */
+  --text-muted:     #434d40;   /* deep moss */
+  --text-faint:     #2a332a;   /* bark */
 
-  /* Borders — softer, lower alpha than upstream */
-  --border-primary:   rgba(255, 255, 255, 0.065);
-  --border-secondary: rgba(255, 255, 255, 0.045);
-  --border-subtle:    rgba(255, 255, 255, 0.03);
+  /* Borders — green-tinted, organic feel */
+  --border-primary:   rgba(120, 170, 130, 0.12);
+  --border-secondary: rgba(100, 150, 110, 0.08);
+  --border-subtle:    rgba(80, 130, 90, 0.05);
 
-  /* Accents — muted, never neon */
-  --accent-green:  #5ed09a;    /* sage — running */
-  --accent-yellow: #e9c46a;    /* warm yellow — streaming */
-  --accent-red:    #e57373;    /* warm red — error */
-  --accent-purple: #c7a9ec;    /* dusty lilac — needs input */
-  --accent-orange: #f0a868;    /* amber */
-  --accent-blue:   #6ba3d6;    /* steel blue — calmer than upstream */
-  --accent-primary:#6ba3d6;
-  --link:          #7bb4e0;
-  --link-hover:    #9fc9ed;
+  /* Accents — nature palette */
+  --accent-green:  #7fb069;    /* moss green — running/success */
+  --accent-yellow: #d4a84b;    /* amber gold — streaming/warning */
+  --accent-red:    #c46b5e;    /* terracotta — error */
+  --accent-purple: #9b8ec4;    /* twilight — needs input */
+  --accent-orange: #c9884a;    /* warm bark */
+  --accent-blue:   #6a9fb0;    /* pond blue — links, info */
+  --accent-primary:#6a9fb0;
+  --link:          #7bb0a0;    /* teal-sage */
+  --link-hover:    #9ecab8;
 
-  /* Shadows — softer */
-  --shadow-card: rgba(0, 0, 0, 0.25);
+  /* Shadows — deep forest */
+  --shadow-card: rgba(0, 8, 2, 0.4);
 
-  /* Neon ring — toned way down for calm aesthetic */
-  --neon-rim-alpha:   0.18;
-  --neon-glow-alpha:  0.04;
-  --neon-glow-blur:   6px;
-  --neon-glow-opacity:0.2;
-  --neon-bg-tint:     rgba(107, 163, 214, 0.015);
+  /* Selected card ring — warm amber glow instead of neon rainbow */
+  --neon-rim-alpha:    0.0;    /* disable the rainbow */
+  --neon-glow-alpha:   0.0;
+  --neon-glow-blur:    0px;
+  --neon-glow-opacity: 0.0;
+  --neon-bg-tint:      transparent;
 }
 
 /* ── Typography ──────────────────────────────────────────────── */
-html {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-feature-settings: 'cv11', 'ss03', 'cv01';
+html, body {
+  font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
-code, pre, .font-mono, [class*="monospace"] {
-  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace !important;
-  font-feature-settings: 'tnum';
+/* Mono stack for code/data */
+code, pre, kbd, samp,
+.font-mono, [class*="monospace"],
+.markdown-content pre,
+.markdown-content pre *,
+.markdown-content pre code,
+.markdown-content pre span {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, Menlo, monospace !important;
+  font-feature-settings: 'tnum', 'liga' 0;
 }
 
-/* ── Session card refinements ────────────────────────────────── */
+/* ── Card selection — warm amber border instead of neon ring ── */
 
-/* Card backgrounds — warmer */
-[data-testid="session-card"],
-.session-card {
-  background: var(--bg-tertiary) !important;
-  border: 1px solid var(--border-secondary) !important;
-  border-radius: 8px !important;
-  transition: background 120ms, border-color 120ms !important;
+/* Kill the spinning neon entirely */
+.card-selected-ring::before {
+  background: rgba(180, 150, 60, 0.35) !important;
+  animation: none !important;
 }
-
-[data-testid="session-card"]:hover,
-.session-card:hover {
-  background: var(--bg-surface) !important;
-  border-color: var(--border-primary) !important;
-}
-
-/* Calmer selected ring — no rotating neon, just a soft accent border */
-.card-selected-ring::before,
 .card-selected-ring::after {
-  opacity: 0.25 !important;
+  background: rgba(180, 150, 60, 0.08) !important;
+  filter: blur(8px) !important;
+  animation: none !important;
 }
 
-/* ── Sidebar refinements ─────────────────────────────────────── */
-
-/* Sidebar background — slightly dimmer than content */
-[class*="sidebar"],
-[data-testid="sidebar"],
-aside {
-  background: var(--bg-secondary) !important;
+/* Add a static warm-glow alternative */
+.card-selected-ring {
+  box-shadow: 0 0 0 1px rgba(180, 150, 60, 0.4),
+              0 0 12px rgba(180, 150, 60, 0.08) !important;
 }
 
-/* Session group headers */
-[data-testid="session-group-header"] {
-  font-size: 10px !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.06em !important;
-  color: var(--text-tertiary) !important;
-  font-weight: 600 !important;
+/* ── Working/streaming pulse — forest amber ──────────────────── */
+.card-working-pulse {
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      transparent 0 10px,
+      rgba(180, 150, 60, 0.07) 10px 20px
+    ),
+    linear-gradient(rgba(180, 150, 60, 0.03), rgba(180, 150, 60, 0.03)) !important;
 }
 
-/* ── Toolbar / topbar ────────────────────────────────────────── */
-
-/* Top navigation bar */
-header, nav, [class*="toolbar"], [class*="topbar"] {
-  border-bottom-color: var(--border-secondary) !important;
+/* Unread pulse — sage green instead of cyan */
+.card-unread-pulse {
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      transparent 0 10px,
+      rgba(127, 176, 105, 0.12) 10px 20px
+    ),
+    linear-gradient(rgba(127, 176, 105, 0.05), rgba(127, 176, 105, 0.05)) !important;
 }
 
-/* ── Buttons ─────────────────────────────────────────────────── */
-
-/* Primary buttons — steel blue instead of vivid blue */
-button[class*="primary"],
-[class*="btn-primary"] {
-  background: var(--accent-primary) !important;
+/* Input pulse — twilight purple with forest tint */
+.card-input-pulse {
+  animation-name: forest-input-pulse !important;
+}
+@keyframes forest-input-pulse {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: rgba(155, 142, 196, 0.06); }
 }
 
-/* ── Scrollbar ───────────────────────────────────────────────── */
+/* ── Scrollbar — thin, forest-tinted ─────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(120, 170, 130, 0.15);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(120, 170, 130, 0.3);
 }
 
-/* ── Status color overrides (global) ─────────────────────────── */
-
-/* Running / active — sage green with glow */
-[class*="text-green"], [class*="bg-green"] {
-  --tw-text-opacity: 1;
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 170, 130, 0.15) transparent;
 }
 
-/* Streaming — warm yellow instead of vivid */
+/* ── Markdown blockquote — forest left-border ────────────────── */
+.markdown-content blockquote {
+  border-left-color: rgba(127, 176, 105, 0.3) !important;
+}
+
+/* ── Search highlights — amber instead of yellow ─────────────── */
+mark.markdown-search-highlight {
+  background-color: rgba(212, 168, 75, 0.25) !important;
+}
+mark.markdown-search-highlight-active {
+  background-color: rgba(212, 168, 75, 0.5) !important;
+  outline-color: rgba(212, 168, 75, 0.7) !important;
+}
+
+/* ── Toolbar / header bar ────────────────────────────────────── */
+header, nav, [class*="toolbar"], [class*="topbar"] {
+  background: var(--bg-secondary) !important;
+  border-bottom-color: var(--border-primary) !important;
+}
+
+/* ── Session card hover — visible but not harsh ──────────────── */
+[data-testid="session-card"]:hover,
+.session-card:hover {
+  background: var(--bg-surface) !important;
+  border-color: rgba(120, 170, 130, 0.12) !important;
+}
+
+/* ── Buttons — forest-tinted ─────────────────────────────────── */
+/* "Add Folder" / "New Workspace" — inherit forest palette */
+button[class*="primary"] {
+  background: var(--accent-blue) !important;
+}
+
+/* ── Status pill / badge overrides ───────────────────────────── */
+/* Running / active */
 [data-status="streaming"] {
-  color: #e9c46a !important;
+  color: var(--accent-yellow) !important;
 }
-
-/* Needs input — dusty lilac */
 [data-status="waiting_for_input"],
 [data-status="needs_input"] {
-  color: #c7a9ec !important;
+  color: var(--accent-purple) !important;
 }
 
-/* ── Content area ────────────────────────────────────────────── */
+/* ── Code block backgrounds — deep forest ────────────────────── */
+.markdown-content pre {
+  background: var(--bg-code) !important;
+  border: 1px solid var(--border-secondary) !important;
+  border-radius: 6px !important;
+}
 
-/* Main content pane — slightly lighter than sidebar for depth */
+/* ── Sidebar panel ───────────────────────────────────────────── */
+aside, [class*="sidebar"], [data-testid="sidebar"] {
+  background: var(--bg-secondary) !important;
+  border-right-color: var(--border-primary) !important;
+}
+
+/* ── Main content area — slightly lighter for depth ──────────── */
 main, [class*="content-area"], [class*="main-content"] {
-  background: #14141a !important;
+  background: #0b120e !important;
 }
 
-/* ── Welcome / onboarding cards ──────────────────────────────── */
-[class*="onboarding"], [class*="welcome"] {
-  border-color: var(--border-secondary) !important;
+/* ── Form inputs ─────────────────────────────────────────────── */
+input, textarea, select {
   background: var(--bg-tertiary) !important;
-  border-radius: 10px !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted) !important;
 }
 
-/* ── Animation preference ────────────────────────────────────── */
+/* ── Reduced motion ──────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .card-working-pulse,
   .card-unread-pulse,
@@ -188,9 +240,7 @@ main, [class*="content-area"], [class*="main-content"] {
   }
 }
 
-/* ── Mobile adjustments ──────────────────────────────────────── */
+/* ── Mobile ──────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  html {
-    font-size: 14px;
-  }
+  html { font-size: 14px; }
 }
