@@ -246,7 +246,19 @@ export type SpawnFailureCode =
   | "PI_CRASHED"
   | "SPAWN_ERRNO"
   | "PREFLIGHT_FAILED"
-  | "REGISTER_TIMEOUT";
+  | "REGISTER_TIMEOUT"
+  // walle-multi-machine: cross-machine spawn was routed to a `machineId`
+  // whose bridge is not currently connected. No retry — operator brings
+  // the machine online and tries again.
+  | "MACHINE_OFFLINE"
+  // walle-multi-machine: bridge accepted a `spawn_on_machine` frame but the
+  // local agent never sent `session_register` within the 30 s watchdog
+  // (`AGENT_DIDNT_REGISTER`), or shelling out to the provider binary itself
+  // failed (`AGENT_INVOKE_FAILED`). Both are bridge-side failures forwarded
+  // upstream as `spawn_on_machine_failed` and translated by the server into
+  // a normal `spawn_error` for the browser.
+  | "AGENT_DIDNT_REGISTER"
+  | "AGENT_INVOKE_FAILED";
 
 /**
  * A single reason from the synchronous spawn preflight check.
@@ -274,6 +286,14 @@ export interface SpawnErrorMessage {
   code?: SpawnFailureCode;
   /** Preflight failure reasons. Only set when code === "PREFLIGHT_FAILED". See change: spawn-failure-diagnostics. */
   reasons?: PreflightReason[];
+  /**
+   * Echoed `requestId` from the originating `spawn_session`. Set ONLY by the
+   * walle-multi-machine cross-machine routing path so the client can match
+   * the typed error banner back to its placeholder card. Local-spawn failures
+   * leave this field unset; correlation goes through the paired
+   * `spawn_result.requestId` instead. Additive — old clients ignore it.
+   */
+  requestId?: string;
 }
 
 /**

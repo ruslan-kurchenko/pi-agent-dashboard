@@ -2,7 +2,10 @@
  * Session action handlers: send_prompt, abort, resume, spawn, shutdown, flow_control.
  */
 import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import type { BrowserToServerMessage } from "@blackbelt-technology/pi-dashboard-shared/browser-protocol.js";
+import type { SpawnOnMachineExtensionMessage } from "@blackbelt-technology/pi-dashboard-shared/protocol.js";
+import type { SpawnMechanism } from "@blackbelt-technology/pi-dashboard-shared/platform/spawn-mechanism.js";
 import type { BrowserHandlerContext } from "./handler-context.js";
 import { spawnPiSession } from "../process-manager.js";
 import { ToolResolver } from "@blackbelt-technology/pi-dashboard-shared/platform/binary-lookup.js";
@@ -395,9 +398,72 @@ export async function handleSpawnSession(
   msg: Extract<BrowserToServerMessage, { type: "spawn_session" }>,
   ctx: BrowserHandlerContext,
 ): Promise<void> {
-  const { ws, headlessPidRegistry, pendingDashboardSpawns, pendingAttachRegistry, pendingWorktreeBaseRegistry, pendingClientCorrelations, sendTo } = ctx;
+  const { ws, headlessPidRegistry, pendingDashboardSpawns, pendingAttachRegistry, pendingWorktreeBaseRegistry, pendingClientCorrelations, piGateway, sendTo } = ctx;
   const config = loadConfig();
   const strategy = config.spawnStrategy ?? "tmux";
+
+  // walle-multi-machine: cross-machine spawn routing. When the browser
+  // tagged the request with a `machineId` that isn't us, hand off to the
+  // bridge owning that id and bail out before any local preflight /
+  // spawnPiSession work runs. The bridge invokes the local agent the
+  // same way `wall-e run` would on that machine; the resulting
+  // `session_register` flows back through this gateway carrying the
+  // bridge's `machineId`, and the client correlates by `requestId`.
+  //
+  // Unset OR matches local → fall through to the existing local path.
+  // Matches remote but no live bridge → fail fast with MACHINE_OFFLINE.
+  const localMachineId = process.env.WALLE_MACHINE_ID || undefined;
+  if (typeof msg.machineId === "string" && msg.machineId.length > 0 && msg.machineId !== localMachineId) {
+    const targetId = msg.machineId;
+    const bridge = piGateway.findBridgeByMachineId(targetId);
+    if (!bridge) {
+      const message = `Machine ${targetId} is not online`;
+      sendTo(ws, { type: "spawn_result", cwd: msg.cwd, success: false, message, requestId: msg.requestId });
+      sendTo(ws, {
+        type: "spawn_error",
+        cwd: msg.cwd,
+        strategy: "remote",
+        message,
+        code: "MACHINE_OFFLINE",
+        requestId: msg.requestId,
+      });
+      return;
+    }
+    // SpawnOnMachineExtensionMessage requires `requestId`. The protocol
+    // declares it optional on the inbound browser message for back-compat,
+    // so when the client didn't mint one we synthesize it here. The
+    // synthesized id flows back to the client via `spawn_result` so the
+    // placeholder card can still correlate with the eventual session.
+    const requestId =
+      typeof msg.requestId === "string" && msg.requestId.length > 0
+        ? msg.requestId
+        : randomUUID();
+    const frame: SpawnOnMachineExtensionMessage = {
+      type: "spawn_on_machine",
+      requestId,
+      cwd: msg.cwd,
+      ...(typeof msg.attachProposal === "string" && msg.attachProposal.length > 0
+        ? { attachProposal: msg.attachProposal }
+        : {}),
+      ...(typeof msg.gitWorktreeBase === "string" && msg.gitWorktreeBase.length > 0
+        ? { gitWorktreeBase: msg.gitWorktreeBase }
+        : {}),
+    };
+    bridge.send(JSON.stringify(frame));
+    // Don't await `session_register` — the bridge will forward it
+    // asynchronously via the normal gateway path, and the existing
+    // `pending-client-correlations` flow ties `requestId` to the eventual
+    // `session_added` broadcast. The synchronous `spawn_result` keeps the
+    // placeholder card visible until that broadcast lands.
+    sendTo(ws, {
+      type: "spawn_result",
+      cwd: msg.cwd,
+      success: true,
+      message: `Routed to bridge for machine ${targetId}`,
+      requestId,
+    });
+    return;
+  }
 
   // Queue the optional attach intent BEFORE awaiting the spawn so a fast
   // bridge `session_register` cannot lose the intent. See change:
@@ -490,7 +556,7 @@ export async function handleSpawnSession(
       watchdog.arm({
         pid: spawnResult.pid,
         cwd: msg.cwd,
-        mechanism: strategy as import("@blackbelt-technology/pi-dashboard-shared/platform/spawn-mechanism.js").SpawnMechanism,
+        mechanism: strategy as SpawnMechanism,
         logPath: spawnResult.logPath,
         // Read-on-arm: pass current config value so a Settings change takes effect
         // on the next spawn without a server restart. See change: spawn-failure-diagnostics (fix W1).

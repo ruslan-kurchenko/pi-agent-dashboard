@@ -46,6 +46,17 @@ export interface PiGateway {
   isSessionConnected(sessionId: string): boolean;
   /** Force-close the WebSocket connection for a session */
   closeSession(sessionId: string): boolean;
+  /**
+   * walle-multi-machine: look up the WebSocket of the bridge whose
+   * authenticated `machineId` matches `id`. Returns the most recently
+   * registered bridge (LIFO) when multiple connections share the same
+   * id — e.g. operator's laptop reconnected, so the freshest one wins.
+   * Returns `undefined` when no bridge for that id is currently
+   * connected, OR when the only matching connection is a loopback
+   * bypass with no machineId on the auth context.
+   * See change: walle-multi-machine.
+   */
+  findBridgeByMachineId(id: string): WebSocket | undefined;
   onEvent?: (sessionId: string, msg: ExtensionToServerMessage) => void;
   onEmpty?: () => void;
   onConnection?: () => void;
@@ -59,6 +70,64 @@ export interface PiGateway {
    * add-folder-task-checker-and-spawn-attach.
    */
   onSessionRegistered?: (sessionId: string, cwd: string) => void;
+}
+
+/**
+ * walle-multi-machine: small registry tracking live bridge WebSockets by
+ * their bearer-authenticated `machineId`. Used by `createPiGateway` to
+ * resolve cross-machine spawn frames to the right bridge connection.
+ *
+ * - `register`: push the ws onto the machineId's LIFO stack.
+ * - `unregister`: drop the ws from the machineId's stack; the stack is
+ *   deleted when it empties.
+ * - `find`: return the most recently registered ws that is still in
+ *   `OPEN` readyState — so a freshly-reconnected laptop preempts an
+ *   older socket whose `close` event has not yet fired. Falls back to
+ *   the raw top-of-stack when nothing is OPEN so the caller can still
+ *   surface a typed `MACHINE_OFFLINE` error after `send` rejects.
+ * - `clear`: drop every entry (used on `stop()`).
+ *
+ * No-ops are tolerated (empty machineId, ws not in the stack) so the
+ * caller can defensively call register/unregister without pre-checks.
+ */
+export interface BridgeRegistry {
+  register(machineId: string, ws: WebSocket): void;
+  unregister(machineId: string, ws: WebSocket): void;
+  find(machineId: string): WebSocket | undefined;
+  clear(): void;
+}
+
+export function createBridgeRegistry(): BridgeRegistry {
+  const stacks = new Map<string, WebSocket[]>();
+  return {
+    register(machineId, ws) {
+      if (typeof machineId !== "string" || machineId.length === 0) return;
+      const stack = stacks.get(machineId);
+      if (stack) stack.push(ws);
+      else stacks.set(machineId, [ws]);
+    },
+    unregister(machineId, ws) {
+      if (typeof machineId !== "string" || machineId.length === 0) return;
+      const stack = stacks.get(machineId);
+      if (!stack) return;
+      const idx = stack.lastIndexOf(ws);
+      if (idx >= 0) stack.splice(idx, 1);
+      if (stack.length === 0) stacks.delete(machineId);
+    },
+    find(machineId) {
+      if (typeof machineId !== "string" || machineId.length === 0) return undefined;
+      const stack = stacks.get(machineId);
+      if (!stack || stack.length === 0) return undefined;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const ws = stack[i]!;
+        if (ws.readyState === WebSocket.OPEN) return ws;
+      }
+      return stack[stack.length - 1];
+    },
+    clear() {
+      stacks.clear();
+    },
+  };
 }
 
 export function createPiGateway(
@@ -78,6 +147,12 @@ export function createPiGateway(
   const heartbeatTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // Map sessionId → { setAt: timestamp, sleepRetried: boolean } for sleep detection
   const heartbeatMeta = new Map<string, { setAt: number; sleepRetried: boolean }>();
+  // walle-multi-machine: bearer-authenticated `machineId` → live bridge
+  // WebSocket registry. See `createBridgeRegistry` for ordering rules
+  // (LIFO, OPEN-preferred). Loopback connections come in with
+  // `connectionMachineId === null` and stay out of the registry — the
+  // routing path returns undefined for those by construction.
+  const bridgeRegistry = createBridgeRegistry();
 
   let onEvent: ((sessionId: string, msg: ExtensionToServerMessage) => void) | undefined;
   let onEmpty: (() => void) | undefined;
@@ -311,6 +386,14 @@ export function createPiGateway(
         aliveMisses.set(ws, 0);
         ws.on("pong", () => { aliveMisses.set(ws, 0); });
 
+        // walle-multi-machine: register this ws under its authenticated
+        // machineId so `findBridgeByMachineId` can route cross-machine
+        // spawn frames. Loopback connections come through with
+        // `connectionMachineId === null` and the registry no-ops on them.
+        if (connectionMachineId) {
+          bridgeRegistry.register(connectionMachineId, ws);
+        }
+
         ws.on("message", (raw) => {
           // Any received message proves the connection is alive
           aliveMisses.set(ws, 0);
@@ -459,6 +542,13 @@ export function createPiGateway(
             onDisconnect?.(currentSessionId);
           }
           aliveMisses.delete(ws);
+          // walle-multi-machine: drop this ws from the bridge registry.
+          // We do NOT wait for heartbeat timeout — a closed TCP socket
+          // is dead for routing purposes even if the session-side
+          // cleanup grants a reconnect grace window.
+          if (connectionMachineId) {
+            bridgeRegistry.unregister(connectionMachineId, ws);
+          }
         });
       });
     },
@@ -479,6 +569,7 @@ export function createPiGateway(
         ws.terminate();
       }
       connections.clear();
+      bridgeRegistry.clear();
       wss?.close();
       wss = null;
     },
@@ -535,6 +626,10 @@ export function createPiGateway(
         return true;
       }
       return false;
+    },
+
+    findBridgeByMachineId(id: string): WebSocket | undefined {
+      return bridgeRegistry.find(id);
     },
   };
 }
