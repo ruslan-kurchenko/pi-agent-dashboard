@@ -114,6 +114,24 @@ export interface SessionRegisterMessage {
   machineId?: string;
   machineLabel?: string;
   machineAccent?: string;
+  /**
+   * walle-multi-machine: the originating browser `spawn_session.requestId`,
+   * echoed back so the server can correlate the new session with the
+   * cross-machine click that asked for it. Set ONLY on the very first
+   * `session_register` emitted by an agent the bridge spawned in response
+   * to a `spawn_on_machine` frame; omitted on every reattach, every
+   * intra-process new/fork/resume, and every register from agents that
+   * weren't spawned by `spawn_on_machine`. The bridge tags the message
+   * just before forwarding upstream (see
+   * `extension/src/spawn-on-machine-handler.ts`).
+   *
+   * Server-side, this is the same correlation token that flows to the
+   * browser via `SessionAddedMessage.spawnRequestId` once the session is
+   * registered.
+   *
+   * See change: walle-multi-machine.
+   */
+  spawnRequestId?: string;
 }
 
 export interface SessionUnregisterMessage {
@@ -518,6 +536,33 @@ export interface PluginPiMessage {
   payload: unknown;
 }
 
+/**
+ * walle-multi-machine: extension → server failure notice the bridge emits
+ * when its handling of a `spawn_on_machine` frame fails — either because
+ * shelling out to the local agent threw outright (`AGENT_INVOKE_FAILED`)
+ * or because the spawned agent never sent `session_register` within the
+ * 30 s watchdog window (`AGENT_DIDNT_REGISTER`). The server translates
+ * this into a browser-facing `spawn_error` keyed on `requestId`.
+ *
+ * `requestId` is mandatory because the server has no other handle on the
+ * pending cross-machine spawn — there's no cwd-FIFO fallback the way the
+ * existing local-spawn watchdog has, since the bridge owns the `cwd` ↔
+ * `requestId` mapping privately.
+ *
+ * See change: walle-multi-machine.
+ */
+export interface SpawnOnMachineFailedToServerMessage {
+  type: "spawn_on_machine_failed";
+  /** Echo of the originating `spawn_on_machine.requestId`. */
+  requestId: string;
+  /** The cwd the bridge tried to spawn at. */
+  cwd: string;
+  /** Failure classifier — surfaces on the resulting browser `spawn_error`. */
+  code: "AGENT_DIDNT_REGISTER" | "AGENT_INVOKE_FAILED";
+  /** Human-readable detail. */
+  message: string;
+}
+
 export type ExtensionToServerMessage =
   | SessionRegisterMessage
   | SessionUnregisterMessage
@@ -550,7 +595,8 @@ export type ExtensionToServerMessage =
   | DispatchExtensionCommandMessage
   | CwdMissingMessage
   | PluginPiMessage
-  | QueueUpdateToServerMessage;
+  | QueueUpdateToServerMessage
+  | SpawnOnMachineFailedToServerMessage;
 
 // ── Server → Extension ──────────────────────────────────────────────
 

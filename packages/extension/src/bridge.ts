@@ -55,9 +55,18 @@ import {
   cleanupAttachmentsForSession,
   MAX_PER_MESSAGE_BYTES as ATTACH_MAX_PER_MESSAGE_BYTES,
 } from "./ask-user-attachments.js";
+import { createSpawnOnMachineHandler, type SpawnOnMachineHandler } from "./spawn-on-machine-handler.js";
+import { spawn as spawnChild } from "@blackbelt-technology/pi-dashboard-shared/platform/exec.js";
 
 const HEARTBEAT_INTERVAL = 15_000;
 const GIT_POLL_INTERVAL = 30_000;
+/**
+ * walle-multi-machine: how often the bridge ticks expired pending
+ * `spawn_on_machine` entries. Cheap (Map iteration, no I/O) so a tight
+ * cadence keeps the failure latency close to {@link SPAWN_REGISTER_TIMEOUT_MS}
+ * without measurably touching the bridge's tick budget.
+ */
+const SPAWN_ON_MACHINE_TICK_INTERVAL = 5_000;
 // Platform-aware process scan cadence. Windows keeps the original 10 s /
 // 30 s floor because `wmic` / PowerShell are expensive and flash consoles;
 // Unix uses 5 s / 5 s so legitimate bash subprocesses surface while still
@@ -924,6 +933,15 @@ function initBridge(pi: ExtensionAPI) {
         if (mutated) emitQueueUpdate();
         return;
       }
+      // walle-multi-machine: server-to-bridge spawn request — invoke the
+      // local agent and remember the cwd→requestId mapping so the resulting
+      // `session_register` can be correlated with the originating click.
+      // Failures (invoke threw, watchdog timeout) are reported upstream by
+      // the handler via the same WebSocket. See change: walle-multi-machine.
+      if (msg.type === "spawn_on_machine") {
+        await spawnOnMachine.handle(msg);
+        return;
+      }
       const response = await commandHandler.handle(msg);
       if (response) connection.send(response);
       // Immediately send model/thinking update after handling set_thinking_level
@@ -990,6 +1008,81 @@ function initBridge(pi: ExtensionAPI) {
 
   // Track connection so future bridge incarnations can disconnect it
   getBridgeState().connections!.push(connection);
+
+  // ── walle-multi-machine: spawn_on_machine receiver ─────────────────────
+  // When the dashboard routes a cross-machine spawn to this machine, we
+  // get a `spawn_on_machine` frame on the SAME WebSocket the bridge dialed
+  // at startup — no inbound port on the laptop, no separate process per
+  // machine. The handler module owns the cwd→requestId map; here we wire
+  // its three seams to the live bridge:
+  //
+  //   sendUpstream     ─→ raw connection.send (bypassing our session_register
+  //                       tag wrapper below; spawn_on_machine_failed messages
+  //                       are unrelated and must not be touched by it).
+  //   invokeLocalAgent ─→ detached `omp run <cwd>` / `pi run <cwd>` per
+  //                       `WALLE_AGENT_PROVIDER`, the same binaries
+  //                       `scripts/wall-e/run.ts` shells out to. The child
+  //                       inherits our env (WALLE_MACHINE_ID,
+  //                       WALLE_MACHINE_BRIDGE_TOKEN, PI_DASHBOARD_URL, …)
+  //                       so its own dashboard-bridge connects back to the
+  //                       same dashboard with the same machine identity.
+  //   now              ─→ Date.now.
+  //
+  // `attachProposal` and `gitWorktreeBase` mirror the existing local-spawn
+  // server-side intent registries — we forward them to the child via env
+  // vars the dashboard server already consumes from `session_register`.
+  const rawConnectionSend = connection.send.bind(connection);
+  const spawnOnMachine: SpawnOnMachineHandler = createSpawnOnMachineHandler({
+    sendUpstream: rawConnectionSend,
+    invokeLocalAgent: async (cwd, opts) => {
+      const provider =
+        (process.env.WALLE_AGENT_PROVIDER ?? "omp").trim().toLowerCase() === "pi"
+          ? "pi"
+          : "omp";
+      const childEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        ...(opts.attachProposal
+          ? { PI_DASHBOARD_SPAWN_ATTACH_PROPOSAL: opts.attachProposal }
+          : {}),
+        ...(opts.gitWorktreeBase
+          ? { PI_DASHBOARD_SPAWN_GIT_WORKTREE_BASE: opts.gitWorktreeBase }
+          : {}),
+      };
+      const child = spawnChild(provider, [], {
+        cwd,
+        env: childEnv,
+        detached: true,
+        stdio: "ignore",
+      });
+      child.unref();
+    },
+    now: () => Date.now(),
+  });
+
+  // Tag this bridge's outbound `session_register` frames whose cwd is in
+  // the pending map. Wrapping at the connection boundary catches BOTH the
+  // inline register inside `session_start` AND the reattach register
+  // emitted by `sendStateSync` in `session-sync.ts` (via `bc.connection`),
+  // without needing to thread the handler into every call site.
+  //
+  // Spawn-on-machine emits its own non-`session_register` frames via
+  // `rawConnectionSend` above, so it cannot recurse through this wrapper.
+  (connection as { send: (msg: unknown) => void }).send = (msg: unknown) => {
+    if (msg && (msg as { type?: string }).type === "session_register") {
+      rawConnectionSend(spawnOnMachine.onSessionRegister(msg as Parameters<typeof spawnOnMachine.onSessionRegister>[0]));
+      return;
+    }
+    rawConnectionSend(msg);
+  };
+
+  // Tick expired pending entries periodically. Registered into
+  // `state.timers` so the bridge's `cleanup` (and the orphaned-timer sweep
+  // at the top of `initBridge`) clears it on reload / shutdown.
+  const spawnOnMachineTimer = setInterval(() => {
+    if (!isActive()) return;
+    spawnOnMachine.tickTimeouts();
+  }, SPAWN_ON_MACHINE_TICK_INTERVAL);
+  getBridgeState().timers!.push(spawnOnMachineTimer);
 
   const commandHandler = createCommandHandler(pi, () => sessionId, {
     getModelRegistry: () => cachedModelRegistry,

@@ -26,6 +26,11 @@ const CODE_HINTS: Record<SpawnFailureCode, HintEntry> = {
   SPAWN_ERRNO: { label: "OS refused to start pi. See message." },
   PREFLIGHT_FAILED: { label: "Preflight checks failed." },
   REGISTER_TIMEOUT: { label: "Pi started but never connected to the dashboard.", cta: { label: "View log", action: "log" } },
+  // walle-multi-machine: cross-machine spawn failure codes. We surface them
+  // as plain text — there's no laptop-side log to open from the daemon UI.
+  MACHINE_OFFLINE: { label: "Target machine has no bridge connected. Bring it online and try again." },
+  AGENT_DIDNT_REGISTER: { label: "Local agent didn't register within 30s on the target machine. The spawn timed out." },
+  AGENT_INVOKE_FAILED: { label: "Bridge couldn't shell out to the local agent on the target machine. See message." },
 };
 
 function openWizard(): void {
