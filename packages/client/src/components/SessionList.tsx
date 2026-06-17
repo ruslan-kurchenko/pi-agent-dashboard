@@ -792,9 +792,13 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
               matched.filter((s) => s.status === "ended"),
               order,
             );
+            // walle-multi-machine: when a machine is explicitly selected
+            // (machineFilter), the operator is inspecting that host's
+            // history — auto-expand ended (like the search case) so its
+            // sessions are visible, not hidden behind a per-folder toggle.
             const showEnded =
               endedSessions.length > 0 &&
-              (endedExpanded.has(group.cwd) || sessionSearch.length > 0);
+              (endedExpanded.has(group.cwd) || sessionSearch.length > 0 || !!machineFilter);
             const visibleSessions = flatMergeMode
               ? sortSessionsByOrder(matched, order) // mixed-status, flat stored order
               : (showEnded
@@ -1095,7 +1099,12 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
             .filter((g) =>
               workspaceFilter.length > 0
                 ? folderMatchesFilters(g)
-                : g.sessions.some((s) => s.status !== "ended")
+                // walle-multi-machine: a selected machine = explicit history
+                // inspection — show its ended-only folders too (the list is
+                // already machine-scoped), bypassing the alive-only default.
+                : machineFilter
+                  ? true
+                  : g.sessions.some((s) => s.status !== "ended")
             )
             .map((group) => renderGroupWithWorkspaceMenu(group, false))}
         </ul>
