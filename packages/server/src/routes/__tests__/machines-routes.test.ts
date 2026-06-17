@@ -10,7 +10,7 @@
  * broadcast helper is captured with an array spy so we can assert the
  * exact frames emitted.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import fs from "node:fs";
 import os from "node:os";
@@ -237,6 +237,16 @@ describe("computeRoster (pure)", () => {
     expect(total).toBe(1);
     expect(roster.find((m) => m.id === "arch-personal")?.sessionCount).toBe(1);
     expect(roster.find((m) => m.id === "walle-daemon")?.sessionCount).toBe(0);
+  });
+
+  // walle-multi-machine: only the messageableId entry is flagged messageable.
+  it("flags only the messageableId entry as messageable", () => {
+    const roster = computeRoster(FIXTURE_MACHINES, [], Date.now(), "walle-daemon", "walle-daemon");
+    expect(roster.find((m) => m.id === "walle-daemon")?.messageable).toBe(true);
+    expect(roster.find((m) => m.id === "arch-personal")?.messageable).toBeUndefined();
+    // No messageableId → no entry flagged.
+    const none = computeRoster(FIXTURE_MACHINES, [], Date.now(), "walle-daemon");
+    expect(none.every((m) => m.messageable === undefined)).toBe(true);
   });
 });
 
@@ -467,5 +477,83 @@ describe("DELETE /api/machines/:id", () => {
     });
     expect(res.statusCode).toBe(400);
     expect(broadcasts).toHaveLength(0);
+  });
+});
+
+// walle-multi-machine: POST /api/machines/:id/message forwards an operator
+// prompt to the local daemon's `dashboard` channel inject endpoint.
+describe("POST /api/machines/:id/message", () => {
+  let app: FastifyInstance;
+  const prevMachine = process.env.WALLE_MACHINE_ID;
+  const prevPort = process.env.WALLE_DASHBOARD_INBOUND_PORT;
+
+  beforeEach(() => {
+    writeFixtureConfig(FIXTURE_MACHINES);
+    process.env.WALLE_MACHINE_ID = "walle-daemon";
+    process.env.WALLE_DASHBOARD_INBOUND_PORT = "9321";
+  });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    if (prevMachine === undefined) delete process.env.WALLE_MACHINE_ID;
+    else process.env.WALLE_MACHINE_ID = prevMachine;
+    if (prevPort === undefined) delete process.env.WALLE_DASHBOARD_INBOUND_PORT;
+    else process.env.WALLE_DASHBOARD_INBOUND_PORT = prevPort;
+    if (app) await app.close();
+  });
+
+  it("forwards to the daemon inject endpoint and returns the threadId", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, threadId: "t-99" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    ({ app } = await makeApp());
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/machines/walle-daemon/message",
+      payload: { text: "do the thing" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ success: true, data: { threadId: "t-99" } });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(String(url)).toBe("http://127.0.0.1:9321/inject");
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ text: "do the thing" });
+  });
+
+  it("returns 501 for a non-local machine id (remote machines are not messageable)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    ({ app } = await makeApp());
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/machines/arch-personal/message",
+      payload: { text: "hi" },
+    });
+    expect(res.statusCode).toBe(501);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 on empty text and never calls the daemon", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    ({ app } = await makeApp());
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/machines/walle-daemon/message",
+      payload: { text: "   " },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 502 when the daemon inject endpoint is unreachable", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNREFUSED"));
+    ({ app } = await makeApp());
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/machines/walle-daemon/message",
+      payload: { text: "hi" },
+    });
+    expect(res.statusCode).toBe(502);
   });
 });

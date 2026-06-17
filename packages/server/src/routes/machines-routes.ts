@@ -53,6 +53,9 @@ export function computeRoster(
   sessions: readonly DashboardSession[],
   now: number = Date.now(),
   localMachineId?: string,
+  // walle-multi-machine: when set, the entry with this id is marked
+  // `messageable` (the dashboard server can reach a wall-e agent for it).
+  messageableId?: string,
 ): MachineRosterEntry[] {
   const byMachine = new Map<string, DashboardSession[]>();
   for (const s of sessions) {
@@ -89,6 +92,7 @@ export function computeRoster(
       sessionCount: aliveCount,
     };
     if (lastSeen > 0) entry.lastSeenAt = new Date(lastSeen).toISOString();
+    if (messageableId && m.id === messageableId) entry.messageable = true;
     return entry;
   });
 }
@@ -172,11 +176,18 @@ export function registerMachinesRoutes(
   function currentRoster(): MachineRosterEntry[] {
     const cfg = loadConfig();
     // walle-multi-machine: attribute machine-less (host-scanned) sessions to this server's machine id
+    const localId = process.env.WALLE_MACHINE_ID || undefined;
+    // walle-multi-machine: messaging is offered only for the local daemon
+    // machine and only when the operator opted in (WALLE_DASHBOARD_MESSAGING=1
+    // means the wall-e `dashboard` channel adapter is configured + reachable).
+    const messageableId =
+      localId && process.env.WALLE_DASHBOARD_MESSAGING === "1" ? localId : undefined;
     return computeRoster(
       cfg.machines,
       sessionManager.listAll(),
       Date.now(),
-      process.env.WALLE_MACHINE_ID || undefined,
+      localId,
+      messageableId,
     );
   }
 
@@ -258,6 +269,59 @@ export function registerMachinesRoutes(
 
       broadcastMachinesChanged();
       return reply.code(204).send();
+    },
+  );
+
+  // walle-multi-machine: send an operator prompt to a machine's wall-e agent.
+  // v1 supports the LOCAL daemon machine only — it forwards to the daemon's
+  // loopback dashboard-channel inject endpoint (the wall-e `dashboard` channel
+  // adapter), which routes the prompt to the configured home agent group as a
+  // tracked, sandboxed container that is bridge-visible in this dashboard.
+  // Same `threadId` = continue (the agent group's per-thread session resumes).
+  // Remote machines (laptops) are driven at the machine itself, not messaged.
+  fastify.post<{ Params: { id: string }; Body: unknown }>(
+    "/api/machines/:id/message",
+    { preHandler: networkGuard },
+    async (request, reply): Promise<ApiResponse<{ threadId: string }> | undefined> => {
+      const { id } = request.params;
+      if (typeof id !== "string" || !ID_PATTERN.test(id)) {
+        reply.code(400);
+        return { success: false, error: "invalid id (expect kebab-case slug, ≤64 chars)" };
+      }
+      const localId = process.env.WALLE_MACHINE_ID;
+      if (!localId || id !== localId) {
+        reply.code(501);
+        return { success: false, error: "messaging is only supported on the local daemon machine" };
+      }
+      const body = request.body as { text?: unknown; threadId?: unknown } | null;
+      const text = typeof body?.text === "string" ? body.text : "";
+      if (!text.trim()) {
+        reply.code(400);
+        return { success: false, error: "text required" };
+      }
+      const port = process.env.WALLE_DASHBOARD_INBOUND_PORT || "9300";
+      const secret = process.env.WALLE_DASHBOARD_BRIDGE_SECRET;
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (secret) headers.authorization = `Bearer ${secret}`;
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/inject`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            text,
+            ...(typeof body?.threadId === "string" && body.threadId ? { threadId: body.threadId } : {}),
+          }),
+        });
+        if (!r.ok) {
+          reply.code(502);
+          return { success: false, error: `daemon inject failed (${r.status})` };
+        }
+        const data = (await r.json()) as { threadId?: string };
+        return { success: true, data: { threadId: data.threadId ?? "" } };
+      } catch (err) {
+        reply.code(502);
+        return { success: false, error: `daemon unreachable: ${err instanceof Error ? err.message : String(err)}` };
+      }
     },
   );
 }

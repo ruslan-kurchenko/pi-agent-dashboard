@@ -14,6 +14,7 @@
  *
  * See change: walle-multi-machine.
  */
+import { useState } from "react";
 import { Icon } from "@mdi/react";
 import { mdiDotsHorizontal } from "@mdi/js";
 import type { MachineRosterEntry, MachineStatus } from "../hooks/useMachineRoster.js";
@@ -109,14 +110,21 @@ export function MachineRoster({
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {group.machines.map((m) => (
-              <MachineRosterCard
-                key={m.id}
-                machine={m}
-                active={selectedMachineId === m.id}
-                onClick={() =>
-                  onMachineSelect(selectedMachineId === m.id ? null : m.id)
-                }
-              />
+              <div key={m.id}>
+                <MachineRosterCard
+                  machine={m}
+                  active={selectedMachineId === m.id}
+                  onClick={() =>
+                    onMachineSelect(selectedMachineId === m.id ? null : m.id)
+                  }
+                />
+                {/* walle-multi-machine: "Ask" composer under the active,
+                    messageable (local daemon) card — messages the wall-e
+                    home agent; the resulting session surfaces above. */}
+                {selectedMachineId === m.id && m.messageable && (
+                  <MachineComposer machine={m} />
+                )}
+              </div>
             ))}
           </div>
         </div>
@@ -317,4 +325,96 @@ function StatusDot({ status }: { status: MachineStatus }) {
         />
       );
   }
+}
+
+/**
+ * walle-multi-machine: inline composer to send an operator prompt to a
+ * messageable machine's wall-e agent (the local daemon's home agent). POSTs
+ * to /api/machines/:id/message, which forwards to the daemon's `dashboard`
+ * channel. The agent runs in a tracked, sandboxed container that becomes
+ * live-visible in the session list above (machine-tagged). Re-sending here
+ * is "continue" — the agent's per-thread session resumes.
+ */
+function MachineComposer({ machine }: { machine: MachineRosterEntry }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const send = async (): Promise<void> => {
+    const t = text.trim();
+    if (!t || busy) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await fetch(`/api/machines/${encodeURIComponent(machine.id)}/message`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: t }),
+      });
+      const j = (await r.json().catch(() => null)) as
+        | { success?: boolean; error?: string }
+        | null;
+      if (r.ok && j?.success) {
+        setText("");
+        setNote("Sent — session will appear above shortly.");
+      } else {
+        setNote(j?.error ?? `Failed (${r.status})`);
+      }
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: "6px 4px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void send();
+          }
+        }}
+        placeholder={`Ask ${machine.label}…  (⌘/Ctrl+Enter)`}
+        rows={2}
+        disabled={busy}
+        data-testid="machine-composer-input"
+        style={{
+          resize: "none",
+          fontSize: 12,
+          lineHeight: 1.4,
+          padding: "6px 8px",
+          borderRadius: 6,
+          background: "var(--bg-primary, #16161a)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          color: "var(--text-primary, #e6e6e9)",
+          outline: "none",
+          fontFamily: "inherit",
+        }}
+      />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 10, color: "var(--text-tertiary, #707078)" }}>{note}</span>
+        <button
+          onClick={() => void send()}
+          disabled={busy || text.trim().length === 0}
+          data-testid="machine-composer-send"
+          style={{
+            fontSize: 11,
+            padding: "4px 12px",
+            borderRadius: 6,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: busy ? "rgba(255,255,255,0.04)" : "var(--accent-blue, #4f7cff)",
+            color: busy ? "var(--text-tertiary, #707078)" : "#fff",
+            cursor: busy || text.trim().length === 0 ? "default" : "pointer",
+            opacity: text.trim().length === 0 ? 0.5 : 1,
+          }}
+        >
+          {busy ? "Sending…" : "Send"}
+        </button>
+      </div>
+    </div>
+  );
 }

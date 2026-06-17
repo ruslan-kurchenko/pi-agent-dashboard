@@ -489,6 +489,13 @@ export interface MachineRosterEntry extends MachineEntry {
   sessionCount: number;
   /** ISO timestamp of the most recent activity on any matching session, if any. */
   lastSeenAt?: string;
+  /**
+   * walle-multi-machine: true when this entry is the dashboard server's OWN
+   * machine AND a wall-e agent is reachable for messaging (the `dashboard`
+   * channel is configured on the daemon). The client shows an "Ask" composer
+   * only for messageable machines; remote laptops are driven at the machine.
+   */
+  messageable?: boolean;
 }
 
 export type ListMachinesResponse = ApiResponse<{ machines: MachineRosterEntry[] }>;
