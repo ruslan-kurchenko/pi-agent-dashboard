@@ -30,7 +30,10 @@ export function SessionMiniStrip({ sessions, selectedId, onSelect }: Props) {
     const aAlive = a.status !== "ended" ? 1 : 0;
     const bAlive = b.status !== "ended" ? 1 : 0;
     if (aAlive !== bAlive) return bAlive - aAlive;
-    return (b.startedAt ?? "").localeCompare(a.startedAt ?? "");
+    // walle-multi-machine: startedAt is a number (epoch ms) — numeric sort, NOT
+    // localeCompare (which is string-only and throws "is not a function" on a
+    // number, crashing the shell ErrorBoundary). Matches every other startedAt sort.
+    return (b.startedAt ?? 0) - (a.startedAt ?? 0);
   });
 
   return (
