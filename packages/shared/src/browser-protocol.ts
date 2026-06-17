@@ -1023,6 +1023,21 @@ export interface SpawnSessionBrowserMessage {
    * See change: spawn-correlation-token.
    */
   requestId?: string;
+  /**
+   * walle-multi-machine: cross-machine spawn target. When set AND not
+   * matching the local daemon's own machine identity, the dashboard
+   * routes the spawn request to the bridge connected with that
+   * `machineId` via a `spawn_on_machine` server-to-bridge frame.
+   * Bridge replies asynchronously via the normal `session_register`
+   * flow (the session shows up tagged with that machine).
+   *
+   * Unset OR matching local → existing local-spawn path.
+   * Set but matching machine has no live bridge → `spawn_error`
+   * code `MACHINE_OFFLINE`, no retry.
+   *
+   * See change: walle-multi-machine.
+   */
+  machineId?: string;
 }
 
 export interface AttachProposalBrowserMessage {

@@ -791,6 +791,33 @@ export interface PromoteFollowupEntryToExtensionMessage {
   index: number;
 }
 
+/**
+ * walle-multi-machine: server-to-extension request to spawn a new
+ * session on the host where the bridge is running.
+ *
+ * Travels over the same WebSocket the bridge dialed at startup, so the
+ * server only needs a `machineId` to route — no inbound port on the
+ * laptop, no separate dashboard process per laptop.
+ *
+ * The bridge invokes the local agent (`omp` / `pi`) the same way
+ * `wall-e run` would on that machine, then the resulting agent's first
+ * `session_register` carries the bridge's `machineId`. The dashboard
+ * matches by `requestId` (browser-minted UUID) to correlate the new
+ * session card with the originating click.
+ *
+ * `attachProposal` and `gitWorktreeBase` mirror `SpawnSessionBrowserMessage`
+ * so the bridge can replay them locally before invoking the agent.
+ *
+ * See change: walle-multi-machine.
+ */
+export interface SpawnOnMachineExtensionMessage {
+  type: "spawn_on_machine";
+  requestId: string;
+  cwd: string;
+  attachProposal?: string;
+  gitWorktreeBase?: string;
+}
+
 export type ServerToExtensionMessage =
   | SendPromptToExtensionMessage
   | AbortToExtensionMessage
@@ -823,4 +850,5 @@ export type ServerToExtensionMessage =
   | ClearFollowupEntriesToExtensionMessage
   | EditFollowupEntryToExtensionMessage
   | RemoveFollowupEntryToExtensionMessage
-  | PromoteFollowupEntryToExtensionMessage;
+  | PromoteFollowupEntryToExtensionMessage
+  | SpawnOnMachineExtensionMessage;
