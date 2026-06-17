@@ -154,7 +154,7 @@ describe("MachineRoster", () => {
       />,
     );
     const counts = screen.getAllByTestId("machine-roster-count");
-    expect(counts.map((c) => c.textContent)).toEqual(["0", "7"]);
+    expect(counts.map((c) => c.textContent)).toEqual(["—", "7"]);
   });
 
   it("dims (60% opacity) when 0 sessions AND status=offline", () => {

@@ -4,14 +4,15 @@
  * Visual contract: mockup `mockups/walle-multi-machine/index.html`.
  * Key design cues (Linear March-2026 + Tailscale admin + Docker rows):
  *   - 3 px accent left-rail per card (operator's curated color)
+ *   - 24px icon square with 2-letter abbreviation, accent bg
+ *   - Status line below name ("● running · 4m ago")
+ *   - Session count right-aligned with "sessions" label
  *   - Running dot glows; idle dot is hollow ring; offline is solid muted
  *   - Offline + 0 sessions → 55% opacity, hover lifts to 90%
- *   - Background is dimmer than content (--bg-nav / warm-gray)
- *   - Spacing: 10 px padding inside card, 4 px gap between cards
  *
  * Renders nothing when `machines` is empty (framework default).
  *
- * See change: walle-multi-machine (Phase 2 — machine roster UI).
+ * See change: walle-multi-machine.
  */
 import { Icon } from "@mdi/react";
 import { mdiDotsHorizontal } from "@mdi/js";
@@ -23,12 +24,44 @@ export interface MachineRosterProps {
   onMachineSelect: (id: string | null) => void;
 }
 
+/** Derive a 2-letter abbreviation for the icon square. */
+function abbrev(label: string, role?: string): string {
+  if (role === "daemon") return "wd";
+  const words = label.replace(/[()[\]]/g, "").trim().split(/\s+/);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toLowerCase();
+  }
+  return label.slice(0, 2).toLowerCase();
+}
+
+/** Human-readable relative time. */
+function timeAgo(iso?: string): string {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return "just now";
+  const m = Math.floor(ms / 60_000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+const STATUS_LABELS: Record<MachineStatus, string> = {
+  online: "running",
+  idle: "idle",
+  offline: "offline",
+  unreachable: "unreachable",
+};
+
 export function MachineRoster({
   machines,
   selectedMachineId,
   onMachineSelect,
 }: MachineRosterProps) {
   if (machines.length === 0) return null;
+
+  // Group by owner for multi-tenant separation.
+  const grouped = groupByOwner(machines);
 
   return (
     <div
@@ -38,38 +71,82 @@ export function MachineRoster({
         borderBottom: "1px solid rgba(255,255,255,0.075)",
       }}
     >
-      {/* Section header — LINEAR style: tiny uppercase, wide tracking */}
+      {/* Section header */}
       <div
         style={{
           display: "flex",
           alignItems: "baseline",
           justifyContent: "space-between",
-          padding: "0 4px 8px",
+          padding: "0 4px 10px",
           color: "var(--text-tertiary, #707078)",
           fontSize: 10,
-          textTransform: "uppercase",
+          textTransform: "uppercase" as const,
           letterSpacing: "0.08em",
           fontWeight: 600,
         }}
       >
-        Machines
+        <span>Machines</span>
       </div>
 
-      {/* Cards */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        {machines.map((m) => (
-          <MachineRosterCard
-            key={m.id}
-            machine={m}
-            active={selectedMachineId === m.id}
-            onClick={() =>
-              onMachineSelect(selectedMachineId === m.id ? null : m.id)
-            }
-          />
-        ))}
-      </div>
+      {/* Cards, potentially grouped by owner */}
+      {grouped.map((group) => (
+        <div key={group.owner ?? "__default"}>
+          {group.owner && (
+            <div
+              style={{
+                marginTop: 10,
+                marginBottom: 6,
+                padding: "6px 4px 4px",
+                color: "var(--text-tertiary, #707078)",
+                fontSize: 10,
+                textTransform: "uppercase" as const,
+                letterSpacing: "0.08em",
+                borderTop: "1px solid rgba(255,255,255,0.045)",
+              }}
+            >
+              {group.owner}
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {group.machines.map((m) => (
+              <MachineRosterCard
+                key={m.id}
+                machine={m}
+                active={selectedMachineId === m.id}
+                onClick={() =>
+                  onMachineSelect(selectedMachineId === m.id ? null : m.id)
+                }
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
+}
+
+interface OwnerGroup {
+  owner: string | null;
+  machines: MachineRosterEntry[];
+}
+
+function groupByOwner(machines: MachineRosterEntry[]): OwnerGroup[] {
+  // If only one owner (or none), no headers needed.
+  const owners = new Set(machines.map((m) => m.owner ?? ""));
+  if (owners.size <= 1) {
+    return [{ owner: null, machines }];
+  }
+  const map = new Map<string, MachineRosterEntry[]>();
+  for (const m of machines) {
+    const key = m.owner ?? "";
+    const arr = map.get(key) ?? [];
+    arr.push(m);
+    map.set(key, arr);
+  }
+  return Array.from(map.entries()).map(([owner, ms]) => ({
+    owner: owner || null,
+    machines: ms,
+  }));
 }
 
 interface CardProps {
@@ -82,6 +159,8 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
   const status: MachineStatus = machine.status ?? "offline";
   const dimmed = machine.sessionCount === 0 && status === "offline";
   const accent = machine.accent ?? "#4a4a52";
+  const statusLabel = STATUS_LABELS[status] ?? "offline";
+  const lastSeen = timeAgo(machine.lastSeenAt);
 
   return (
     <button
@@ -100,9 +179,8 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
         gridTemplateColumns: "24px 1fr auto",
         alignItems: "center",
         gap: 10,
-        padding: "10px 10px 10px 14px",
+        padding: "10px 10px 10px 16px",
         borderRadius: 8,
-        marginBottom: 0,
         cursor: "pointer",
         border: "none",
         textAlign: "left" as const,
@@ -111,25 +189,20 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
         transition: "background 120ms, opacity 150ms",
         background: active ? "rgba(255,255,255,0.04)" : "transparent",
         opacity: dimmed ? 0.55 : 1,
-        ...(active
-          ? {
-              boxShadow: `inset 0 0 0 1px ${accent}40`,
-            }
-          : {}),
+        ...(active ? { boxShadow: `inset 0 0 0 1px ${accent}40` } : {}),
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.background =
-          "rgba(255,255,255,0.025)";
-        if (dimmed) (e.currentTarget as HTMLElement).style.opacity = "0.9";
+        const el = e.currentTarget as HTMLElement;
+        el.style.background = "rgba(255,255,255,0.03)";
+        if (dimmed) el.style.opacity = "0.9";
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.background = active
-          ? "rgba(255,255,255,0.04)"
-          : "transparent";
-        if (dimmed) (e.currentTarget as HTMLElement).style.opacity = "0.55";
+        const el = e.currentTarget as HTMLElement;
+        el.style.background = active ? "rgba(255,255,255,0.04)" : "transparent";
+        if (dimmed) el.style.opacity = "0.55";
       }}
     >
-      {/* ---- Accent left-rail ---- */}
+      {/* Accent left-rail */}
       <span
         aria-hidden="true"
         style={{
@@ -143,7 +216,7 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
         }}
       />
 
-      {/* ---- Icon square ---- */}
+      {/* Icon square — 24px with 2-letter abbreviation */}
       <span
         aria-hidden="true"
         data-testid="machine-roster-accent"
@@ -154,89 +227,107 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
           background: accent,
           opacity: 0.85,
           color: "#15151a",
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: 700,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontFamily:
-            "'JetBrains Mono', ui-monospace, Menlo, monospace",
+          fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace",
+          textTransform: "uppercase" as const,
+          letterSpacing: "-0.03em",
         }}
       >
-        {(machine.label ?? machine.id).charAt(0).toUpperCase()}
+        {abbrev(machine.label, machine.role)}
       </span>
 
-      {/* ---- Meta: label + id · role ---- */}
+      {/* Meta: label + status line */}
       <span style={{ minWidth: 0 }}>
         <span
           data-testid="machine-roster-label"
           style={{
-            display: "block",
+            display: "flex",
+            alignItems: "baseline",
+            gap: 4,
             color: "var(--text-primary, #ececef)",
             fontSize: 13,
             fontWeight: 500,
-            marginBottom: 2,
+            lineHeight: 1.2,
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            lineHeight: 1.2,
           }}
         >
           {machine.label}
+          {machine.role && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 400,
+                color: "var(--text-tertiary, #707078)",
+              }}
+            >
+              {machine.role}
+            </span>
+          )}
         </span>
+        {/* Status line: ● running · 4m ago */}
         <span
           data-testid="machine-roster-sub"
           style={{
-            display: "block",
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            marginTop: 2,
             color: "var(--text-tertiary, #707078)",
             fontSize: 11,
             lineHeight: 1.2,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
           }}
         >
-          {machine.id}
-          {machine.role ? (
-            <span style={{ opacity: 0.7 }}> · {machine.role}</span>
-          ) : null}
+          <StatusDot status={status} />
+          <span>{statusLabel}</span>
+          {lastSeen && (
+            <>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <span>{lastSeen}</span>
+            </>
+          )}
         </span>
       </span>
 
-      {/* ---- Status + count ---- */}
+      {/* Session count — right-aligned */}
       <span
         style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "flex-end",
-          gap: 2,
-          color: "var(--text-tertiary, #707078)",
-          fontSize: 10,
-          fontVariantNumeric: "tabular-nums",
+          gap: 1,
+          minWidth: 24,
         }}
       >
         <span
+          data-testid="machine-roster-count"
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 5,
+            color: "var(--text-primary, #ececef)",
+            fontWeight: 500,
+            fontSize: 13,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
-          <StatusDot status={status} />
+          {machine.sessionCount > 0 ? machine.sessionCount : "—"}
+        </span>
+        {machine.sessionCount > 0 && (
           <span
-            data-testid="machine-roster-count"
             style={{
-              color: "var(--text-primary, #ececef)",
-              fontWeight: 500,
-              fontSize: 12,
+              color: "var(--text-tertiary, #707078)",
+              fontSize: 9,
             }}
           >
-            {machine.sessionCount}
+            {machine.sessionCount === 1 ? "session" : "sessions"}
           </span>
-        </span>
+        )}
       </span>
 
-      {/* ---- Kebab (visual stub, Phase 4 wires actions) ---- */}
+      {/* Kebab */}
       <span
         aria-hidden="true"
         data-testid="machine-roster-kebab"
@@ -257,7 +348,6 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
         <Icon path={mdiDotsHorizontal} size={0.55} />
       </span>
 
-      {/* Show kebab on hover via a tiny <style> scoped by nesting */}
       <style>{`
         [data-testid="machine-roster-card"]:hover .machine-roster-kebab {
           display: flex !important;
@@ -306,10 +396,7 @@ function StatusDot({ status }: { status: MachineStatus }) {
         <span
           aria-hidden="true"
           data-testid="machine-roster-dot"
-          style={{
-            ...base,
-            background: "#e6a55a",
-          }}
+          style={{ ...base, background: "#e6a55a" }}
         />
       );
     case "offline":
@@ -318,10 +405,7 @@ function StatusDot({ status }: { status: MachineStatus }) {
         <span
           aria-hidden="true"
           data-testid="machine-roster-dot"
-          style={{
-            ...base,
-            background: "#6a6a72",
-          }}
+          style={{ ...base, background: "#6a6a72" }}
         />
       );
   }
