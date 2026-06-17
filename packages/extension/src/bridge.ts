@@ -9,6 +9,7 @@ import { Loader } from "@earendil-works/pi-tui";
 import { ConnectionManager } from "./connection.js";
 import { detectSessionSource } from "./source-detector.js";
 import { buildVisibilityRegisterFields } from "./visibility-intent.js";
+import { buildWalleMachineFields } from "./walle-machine-fields.js";
 import { mapEventToProtocol } from "./event-forwarder.js";
 import { createCommandHandler } from "./command-handler.js";
 import { shouldApplyDefaultModel } from "./bridge-default-model-gate.js";
@@ -1980,6 +1981,7 @@ function initBridge(pi: ExtensionAPI) {
       // Fact-forwarding: server decides auto-hide. See change:
       // auto-hide-headless-worker-sessions.
       ...buildVisibilityRegisterFields(cachedHasUI, process.env),
+      ...buildWalleMachineFields(process.env),
     });
 
     // Allow event forwarding now that session_register is buffered

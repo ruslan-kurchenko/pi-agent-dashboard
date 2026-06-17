@@ -269,6 +269,12 @@ export async function createServer(config: ServerConfig): Promise<DashboardServe
       jjState: session.jjState
         ? { workspaceRoot: session.jjState.workspaceRoot, workspaceName: session.jjState.workspaceName }
         : undefined,
+      // Persist per-machine identity (walle multi-machine) so cold-start
+      // restoration can render machine chips before any bridge reconnects.
+      // See change: walle-multi-machine.
+      machine: session.machine
+        ? { id: session.machine.id, label: session.machine.label, accent: session.machine.accent }
+        : undefined,
       cachedAt: Date.now(),
     });
     // Order-map key for this session: the RESOLVED group path (parent repo

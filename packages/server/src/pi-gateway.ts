@@ -320,6 +320,19 @@ export function createPiGateway(
                   msg.visibilityIntent === "hidden" || msg.visibilityIntent === "visible"
                     ? msg.visibilityIntent
                     : undefined,
+                // Per-machine identity (walle multi-machine). Sanitize: only
+                // accept `machineId` as a non-empty string; the others are
+                // optional and decorative. See change: walle-multi-machine.
+                machine:
+                  typeof msg.machineId === "string" && msg.machineId.trim().length > 0
+                    ? {
+                        id: msg.machineId,
+                        label:
+                          typeof msg.machineLabel === "string" ? msg.machineLabel : undefined,
+                        accent:
+                          typeof msg.machineAccent === "string" ? msg.machineAccent : undefined,
+                      }
+                    : undefined,
               });
               console.error(`[gateway] session registered: ${msg.sessionId} cwd=${msg.cwd}`);
 

@@ -94,6 +94,19 @@ export interface SessionMeta {
    */
   processDrawerCollapsed?: boolean;
 
+  /**
+   * Per-machine identity persisted from the bridge's `session_register`.
+   * Mirrors `DashboardSession.machine`. Survives server restarts and
+   * lets a cold-start `session-scanner.ts` restore machine-tagged sessions
+   * without a live bridge. Absent on single-machine / upstream installs.
+   * See change: walle-multi-machine.
+   */
+  machine?: {
+    id: string;
+    label?: string;
+    accent?: string;
+  };
+
   // Cache freshness — compared against .jsonl mtime
   cachedAt?: number;
 }

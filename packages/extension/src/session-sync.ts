@@ -9,6 +9,7 @@ import { replayEntriesAsEvents } from "@blackbelt-technology/pi-dashboard-shared
 import { gatherGitInfo, gatherJjInfo } from "./vcs-info.js";
 import type { FlowInfo } from "@blackbelt-technology/pi-dashboard-shared/types.js";
 import { buildProviderCatalogue, toModelInfo } from "./provider-register.js";
+import { buildWalleMachineFields } from "./walle-machine-fields.js";
 
 /**
  * Send full state sync to the server (session_register, commands, flows, models).
@@ -81,6 +82,7 @@ export function sendStateSync(
     registerReason,
     ...(spawnToken ? { spawnToken } : {}),
     ...(dashboardSpawned ? { dashboardSpawned: true } : {}),
+    ...buildWalleMachineFields(process.env),
   });
 
   bc.hasRegisteredOnce = true;
@@ -169,6 +171,7 @@ export function handleSessionChange(
     eventCount,
     pid: process.pid,
     registerReason: "spawn",
+    ...buildWalleMachineFields(process.env),
   });
 
   replaySessionEntries(bc);

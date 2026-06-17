@@ -94,6 +94,26 @@ export interface SessionRegisterMessage {
    * See change: auto-hide-headless-worker-sessions.
    */
   visibilityIntent?: "hidden" | "visible";
+  /**
+   * Per-machine identity. Populated by the bridge from env vars set by the
+   * wall-e launcher (`WALLE_MACHINE_ID`, `WALLE_MACHINE_LABEL`,
+   * `WALLE_MACHINE_ACCENT`). When the operator deploys a multi-machine
+   * topology (daemon + laptops over Tailscale), the dashboard uses these to
+   * group sessions by physical machine and render the Machine Roster.
+   *
+   * Absent on bridges that don't set the env (upstream / single-machine
+   * installs). Server treats absence as "unknown machine" — sessions still
+   * render, just without machine identity decoration.
+   *
+   * `machineId` is an operator-assigned slug (e.g. `walle-daemon`,
+   * `arch-personal`, `mac-work`). `machineLabel` is the human display name
+   * ("wall-e", "Arch (this laptop)"). `machineAccent` is an optional CSS
+   * color string driving the per-machine accent rail/chip.
+   * See change: walle-multi-machine.
+   */
+  machineId?: string;
+  machineLabel?: string;
+  machineAccent?: string;
 }
 
 export interface SessionUnregisterMessage {

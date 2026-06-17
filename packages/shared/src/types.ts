@@ -210,6 +210,22 @@ export interface DashboardSession {
    * See capability `mid-turn-prompt-queue`. See change: add-followup-edit-and-steer-cancel.
    */
   pendingQueues?: { steering: string[]; followUp: string[] };
+  /**
+   * Per-machine identity for multi-machine deployments. Populated from the
+   * bridge's `session_register` (which reads `WALLE_MACHINE_*` env vars set
+   * by the wall-e launcher). Persisted to `.meta.json` so it survives
+   * server restarts. Absent on single-machine / upstream installs.
+   *
+   * Clients use this for: machine chip on session card + accent rail,
+   * folder header machine badge (disambiguates same cwd across machines),
+   * group-by-machine sidebar mode, ⌘K palette filtering.
+   * See change: walle-multi-machine.
+   */
+  machine?: {
+    id: string;
+    label?: string;
+    accent?: string;
+  };
 }
 
 // ── Extension UI System (Phase 1: management-modal slot) ───────────

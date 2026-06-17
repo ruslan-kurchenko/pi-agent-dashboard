@@ -39,6 +39,14 @@ export interface RegisterSessionParams {
    * See change: auto-hide-headless-worker-sessions.
    */
   visibilityIntent?: "hidden" | "visible";
+  /**
+   * Per-machine identity forwarded from `SessionRegisterMessage.machine*`
+   * for the wall-e multi-machine deployment. Propagated to
+   * `DashboardSession.machine`. Optional and back-compatible — absence
+   * means single-machine / upstream.
+   * See change: walle-multi-machine.
+   */
+  machine?: { id: string; label?: string; accent?: string };
 }
 
 export interface OnChangeContext {
@@ -137,6 +145,11 @@ export function createMemorySessionManager(): SessionManager {
         // a fresh `queue_update` from the bridge populates it.
         // See change: add-followup-edit-and-steer-cancel.
         pendingQueues: { steering: [], followUp: [] },
+        // Per-machine identity (walle multi-machine). Reattach preserves the
+        // existing tag when the bridge omits it; first-register accepts the
+        // bridge-supplied value or leaves undefined (single-machine install).
+        // See change: walle-multi-machine.
+        machine: params.machine ?? existing?.machine,
       };
       sessions.set(params.id, session);
       mgr.onChange?.(params.id, {

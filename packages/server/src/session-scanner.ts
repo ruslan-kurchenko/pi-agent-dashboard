@@ -96,6 +96,10 @@ function sessionFromMeta(
     // gitWorktree.base is the merged value, not this raw cache).
     // See change: add-worktree-spawn-dialog.
     gitWorktreeBase: meta.gitWorktreeBase,
+    // Per-machine identity restored from sidecar (walle multi-machine).
+    // Lets a cold-start scanner show machine-tagged sessions before any
+    // bridge reconnects. See change: walle-multi-machine.
+    machine: meta.machine,
     // Reconstruct worktree/jj parentage from the persisted grouping subset so
     // cold-start grouping (no live bridge) collapses this session under its
     // parent repo via `resolveSessionGroupPath`, matching live-bridge grouping.
