@@ -255,7 +255,7 @@ export function useSessionActions(deps: SessionActionDeps) {
   const handleSpawnSession = useCallback((
     cwd: string,
     attachProposal?: string,
-    opts?: { gitWorktreeBase?: string; placeholderCwd?: string },
+    opts?: { gitWorktreeBase?: string; placeholderCwd?: string; machineId?: string },
   ) => {
     // The placeholder/disabled-button group cwd. For a normal spawn this is
     // the spawn cwd; for a worktree spawn the host passes the PARENT repo
@@ -297,6 +297,10 @@ export function useSessionActions(deps: SessionActionDeps) {
       requestId,
       ...(attachProposal ? { attachProposal } : {}),
       ...(opts?.gitWorktreeBase ? { gitWorktreeBase: opts.gitWorktreeBase } : {}),
+      // walle-multi-machine: cross-machine spawn target. Set by the
+      // ⌘K command palette; server routes the request to the matching
+      // bridge via `spawn_on_machine`. Unset → existing local path.
+      ...(opts?.machineId ? { machineId: opts.machineId } : {}),
     });
   }, [send, clearSpawningCwd, setSpawningCwds, spawnTimeoutsRef, pendingSpawnsRef]);
 

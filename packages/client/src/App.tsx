@@ -7,6 +7,7 @@ import { useDocumentTitle } from "./hooks/useDocumentTitle.js";
 import { SessionList } from "./components/SessionList.js";
 import { MachineRoster } from "./components/MachineRoster.js";
 import { useMachineRoster } from "./hooks/useMachineRoster.js";
+import { CommandPalette } from "./components/CommandPalette.js";
 import { ResizableSidebar } from "./components/ResizableSidebar.js";
 import { HamburgerButton, MobileOverlay } from "./components/MobileOverlay.js";
 import { MobileShell } from "./components/MobileShell.js";
@@ -307,6 +308,12 @@ export default function App() {
   // See change: walle-multi-machine.
   const { machines: rosterMachines } = useMachineRoster(onMessage);
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
+  // walle-multi-machine: ⌘K command palette state. The palette itself
+  // owns the document-level ⌘K listener that toggles this boolean via
+  // `onOpen` / `onClose`. Keeping the open state up here so the palette
+  // co-mounts with the rest of the dashboard chrome and survives
+  // route changes.
+  const [paletteOpen, setPaletteOpen] = useState(false);
   // Drives the slot-registry enable filter from /api/health.plugins[] +
   // plugin_config_update broadcasts. The returned `startedAt` is also
   // consumed inside the Plugins tab via this same hook re-call, so we don't
@@ -1215,6 +1222,47 @@ export default function App() {
     />
   );
 
+  // walle-multi-machine: ⌘K command palette. Mounted once in both the
+  // mobile and desktop layouts so its document-level keyboard handler
+  // is always wired up. The palette renders nothing visible while
+  // closed (only the mobile FAB), so this is a cheap unconditional
+  // mount. `recentCwdsForMachine` derives suggestions from the live
+  // sessions Map filtered by `session.machine?.id`. `initialCwd`
+  // pre-fills step 2 with the focused session's cwd when one exists.
+  // See change: walle-multi-machine.
+  const commandPalette = (
+    <CommandPalette
+      open={paletteOpen}
+      onOpen={() => setPaletteOpen(true)}
+      onClose={() => setPaletteOpen(false)}
+      machines={rosterMachines}
+      initialCwd={selectedId ? sessions.get(selectedId)?.cwd : undefined}
+      recentCwdsForMachine={(id) => {
+        // Most-recent-first cwds for the given machine, deduped. Cap
+        // the iteration to keep the palette open path cheap even with
+        // a large sessions Map.
+        const seen = new Set<string>();
+        const out: string[] = [];
+        const sorted = Array.from(sessions.values()).sort(
+          (a, b) => (b.lastActivityAt ?? b.startedAt) - (a.lastActivityAt ?? a.startedAt),
+        );
+        for (const s of sorted) {
+          if (s.machine?.id !== id) continue;
+          if (!s.cwd || seen.has(s.cwd)) continue;
+          seen.add(s.cwd);
+          out.push(s.cwd);
+          if (out.length >= 12) break;
+        }
+        return out;
+      }}
+      onSpawn={(cwd, machineId) =>
+        handleSpawnSession(cwd, undefined, { machineId })
+      }
+      mobile={isMobile}
+      onToast={(text) => showToast(text, "info")}
+    />
+  );
+
   // Full-page OpenSpec board overlay element. Shared across the three overlay
   // render sites (desktop + responsive layouts). See change: redesign-openspec-board.
   const openspecBoardOverlay = openspecBoardMatch && openspecBoardCwd ? (
@@ -1745,6 +1793,7 @@ export default function App() {
         />
         <Toast messages={toastMessages} onDismiss={dismissToast} />
         <SpawnErrorToastHost />
+        {commandPalette}
         {/* First-launch chat-display preset picker. Opens once when the
             server reports `displayPrefs: undefined`. See change:
             configurable-chat-display. */}
@@ -1867,6 +1916,7 @@ export default function App() {
   // Desktop: side-by-side layout
   return apiProvider(
     <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      {commandPalette}
       <div className="hidden md:flex">
         <ResizableSidebar sidebar={sidebar}>
           {machineRoster}
