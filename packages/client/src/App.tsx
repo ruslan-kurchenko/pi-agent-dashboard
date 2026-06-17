@@ -14,6 +14,7 @@ import { ResizableSidebar } from "./components/ResizableSidebar.js";
 import { HamburgerButton, MobileOverlay } from "./components/MobileOverlay.js";
 import { MobileShell } from "./components/MobileShell.js";
 import { SpawnErrorToastHost } from "./components/SpawnErrorToastHost.js";
+import { SessionMiniStrip } from "./components/SessionMiniStrip.js";
 import { useMobile } from "./hooks/useMobile.js";
 import { getMobileDepth } from "./lib/mobile-depth.js";
 import { ChatView, type ChatViewHandle } from "./components/ChatView.js";
@@ -1930,7 +1931,16 @@ export default function App() {
         onMachineSelect={setSelectedMachineId}
       />
       <div className="hidden md:flex">
-        <ResizableSidebar sidebar={sidebar}>
+        <ResizableSidebar
+          sidebar={sidebar}
+          collapsedContent={
+            <SessionMiniStrip
+              sessions={Array.from(sessions.values())}
+              selectedId={selectedId}
+              onSelect={(id) => navigate(`/session/${id}`)}
+            />
+          }
+        >
           {sessionList}
         </ResizableSidebar>
       </div>

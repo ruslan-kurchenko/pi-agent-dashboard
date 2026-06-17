@@ -117,7 +117,8 @@ export function CollapsibleRosterColumn({
         {/* Expand chevron */}
         <button
           onClick={column.toggle}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-5 h-8 flex items-center justify-center rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] shadow-md transition-colors cursor-pointer"
+          style={{ position: 'absolute', right: 0, top: '33%', transform: 'translateY(-50%) translateX(50%)', zIndex: 10 }}
+          className="w-5 h-8 flex items-center justify-center rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] shadow-md transition-colors cursor-pointer"
           title="Expand machines"
           data-testid="roster-expand"
         >
@@ -147,7 +148,8 @@ export function CollapsibleRosterColumn({
       {/* Collapse chevron */}
       <button
         onClick={column.toggle}
-        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-5 h-8 flex items-center justify-center rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] shadow-md transition-colors cursor-pointer"
+        style={{ position: 'absolute', right: 0, top: '33%', transform: 'translateY(-50%) translateX(50%)', zIndex: 10 }}
+        className="w-5 h-8 flex items-center justify-center rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] shadow-md transition-colors cursor-pointer"
         title="Collapse machines"
         data-testid="roster-collapse"
       >

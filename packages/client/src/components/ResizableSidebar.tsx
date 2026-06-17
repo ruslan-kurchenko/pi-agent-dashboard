@@ -6,11 +6,13 @@ import type { SidebarState } from "../hooks/useSidebarState.js";
 interface Props {
   sidebar: SidebarState;
   children: ReactNode;
+  /** walle-multi-machine: content shown in the collapsed strip instead of
+   *  a blank 28px bar. Rendered above the expand chevron. */
+  collapsedContent?: ReactNode;
 }
 
-const COLLAPSED_WIDTH = 28;
-
-export function ResizableSidebar({ sidebar, children }: Props) {
+const COLLAPSED_WIDTH = 40;
+export function ResizableSidebar({ sidebar, children, collapsedContent }: Props) {
   const { width, collapsed, setWidth, toggleCollapse } = sidebar;
   const dragging = useRef(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -52,13 +54,18 @@ export function ResizableSidebar({ sidebar, children }: Props) {
     };
   }, [setWidth]);
 
-  // Collapsed strip
+  // Collapsed strip — shows collapsedContent (session mini-indicators) if provided
   if (collapsed) {
     return (
       <div
-        className="relative border-r border-[var(--border-primary)] bg-[var(--bg-primary)] flex-shrink-0"
+        className="relative border-r border-[var(--border-primary)] bg-[var(--bg-primary)] flex-shrink-0 flex flex-col"
         style={{ width: COLLAPSED_WIDTH }}
       >
+        {collapsedContent && (
+          <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ paddingTop: 8 }}>
+            {collapsedContent}
+          </div>
+        )}
         <button
           onClick={toggleCollapse}
           className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-5 h-8 flex items-center justify-center rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] shadow-md transition-colors cursor-pointer"
