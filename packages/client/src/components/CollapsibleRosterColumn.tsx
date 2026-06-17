@@ -17,7 +17,7 @@ import { MachineRoster, type MachineRosterProps } from "./MachineRoster.js";
 import type { CollapsibleColumnState } from "../hooks/useCollapsibleColumn.js";
 import type { MachineStatus } from "../hooks/useMachineRoster.js";
 
-const EXPANDED_WIDTH = 220;
+const EXPANDED_WIDTH = 240;
 const COLLAPSED_WIDTH = 52;
 
 interface Props extends MachineRosterProps {

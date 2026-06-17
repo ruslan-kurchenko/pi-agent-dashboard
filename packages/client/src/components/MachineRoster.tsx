@@ -170,16 +170,13 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
       data-machine-id={machine.id}
       data-active={active ? "true" : "false"}
       data-status={status}
-      title={`${machine.label} (${machine.id})${
-        machine.role ? ` — ${machine.role}` : ""
-      }`}
+      title={`${machine.label} (${machine.id})${machine.role ? ` — ${machine.role}` : ""}`}
       style={{
         position: "relative",
-        display: "grid",
-        gridTemplateColumns: "24px 1fr auto",
-        alignItems: "center",
-        gap: 10,
-        padding: "10px 10px 10px 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        padding: "8px 10px 8px 14px",
         borderRadius: 8,
         cursor: "pointer",
         border: "none",
@@ -203,156 +200,69 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
       }}
     >
       {/* Accent left-rail */}
-      <span
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 6,
-          bottom: 6,
-          width: 3,
-          borderRadius: 3,
-          background: accent,
-        }}
-      />
+      <span aria-hidden="true" style={{
+        position: "absolute", left: 0, top: 6, bottom: 6,
+        width: 3, borderRadius: 3, background: accent,
+      }} />
 
-      {/* Icon square — 24px with 2-letter abbreviation */}
-      <span
-        aria-hidden="true"
-        data-testid="machine-roster-accent"
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: 6,
-          background: accent,
-          opacity: 0.85,
-          color: "#15151a",
-          fontSize: 10,
-          fontWeight: 700,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace",
-          textTransform: "uppercase" as const,
-          letterSpacing: "-0.03em",
-        }}
-      >
-        {abbrev(machine.label, machine.role)}
-      </span>
-
-      {/* Meta: label + status line */}
-      <span style={{ minWidth: 0 }}>
+      {/* Row 1: icon + name + count */}
+      <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         <span
-          data-testid="machine-roster-label"
+          aria-hidden="true"
+          data-testid="machine-roster-accent"
           style={{
-            display: "flex",
-            alignItems: "baseline",
-            gap: 4,
-            color: "var(--text-primary, #ececef)",
-            fontSize: 13,
-            fontWeight: 500,
-            lineHeight: 1.2,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+            width: 22, height: 22, borderRadius: 5,
+            background: accent, opacity: 0.85,
+            color: "#15151a", fontSize: 9, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "'Cascadia Code', 'JetBrains Mono', ui-monospace, monospace",
+            textTransform: "uppercase" as const, letterSpacing: "-0.03em",
+            flexShrink: 0,
           }}
         >
+          {abbrev(machine.label, machine.role)}
+        </span>
+        <span data-testid="machine-roster-label" style={{
+          flex: 1, minWidth: 0,
+          color: "var(--text-primary, #eaeaec)",
+          fontSize: 13, fontWeight: 500, lineHeight: 1.2,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}>
           {machine.label}
-          {machine.role && (
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 400,
-                color: "var(--text-tertiary, #707078)",
-              }}
-            >
-              {machine.role}
-            </span>
-          )}
         </span>
-        {/* Status line: ● running · 4m ago */}
-        <span
-          data-testid="machine-roster-sub"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 5,
-            marginTop: 2,
-            color: "var(--text-tertiary, #707078)",
-            fontSize: 11,
-            lineHeight: 1.2,
-          }}
-        >
-          <StatusDot status={status} />
-          <span>{statusLabel}</span>
-          {lastSeen && (
-            <>
-              <span style={{ opacity: 0.4 }}>·</span>
-              <span>{lastSeen}</span>
-            </>
-          )}
-        </span>
-      </span>
-
-      {/* Session count — right-aligned */}
-      <span
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "flex-end",
-          gap: 1,
-          minWidth: 24,
-        }}
-      >
-        <span
-          data-testid="machine-roster-count"
-          style={{
-            color: "var(--text-primary, #ececef)",
-            fontWeight: 500,
-            fontSize: 13,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
+        <span data-testid="machine-roster-count" style={{
+          color: machine.sessionCount > 0 ? "var(--text-primary, #eaeaec)" : "var(--text-muted, #44444c)",
+          fontWeight: 500, fontSize: 12, fontVariantNumeric: "tabular-nums", flexShrink: 0,
+        }}>
           {machine.sessionCount > 0 ? machine.sessionCount : "—"}
         </span>
-        {machine.sessionCount > 0 && (
-          <span
-            style={{
-              color: "var(--text-tertiary, #707078)",
-              fontSize: 9,
-            }}
-          >
-            {machine.sessionCount === 1 ? "session" : "sessions"}
-          </span>
+      </span>
+
+      {/* Row 2: role · ● status · last seen */}
+      <span data-testid="machine-roster-sub" style={{
+        display: "flex", alignItems: "center", gap: 5,
+        paddingLeft: 30,
+        color: "var(--text-tertiary, #6a6a74)", fontSize: 11, lineHeight: 1.2,
+      }}>
+        {machine.role && (
+          <><span>{machine.role}</span><span style={{ opacity: 0.35 }}>·</span></>
+        )}
+        <StatusDot status={status} />
+        <span>{statusLabel}</span>
+        {lastSeen && (
+          <><span style={{ opacity: 0.35 }}>·</span><span>{lastSeen}</span></>
         )}
       </span>
 
-      {/* Kebab */}
-      <span
-        aria-hidden="true"
-        data-testid="machine-roster-kebab"
-        className="machine-roster-kebab"
-        style={{
-          position: "absolute",
-          right: 4,
-          top: 4,
-          width: 20,
-          height: 20,
-          alignItems: "center",
-          justifyContent: "center",
-          borderRadius: 4,
-          color: "var(--text-tertiary, #707078)",
-          display: "none",
-        }}
-      >
+      {/* Kebab (hover-only) */}
+      <span aria-hidden="true" data-testid="machine-roster-kebab" className="machine-roster-kebab" style={{
+        position: "absolute", right: 4, top: 4, width: 20, height: 20,
+        alignItems: "center", justifyContent: "center", borderRadius: 4,
+        color: "var(--text-tertiary, #6a6a74)", display: "none",
+      }}>
         <Icon path={mdiDotsHorizontal} size={0.55} />
       </span>
-
-      <style>{`
-        [data-testid="machine-roster-card"]:hover .machine-roster-kebab {
-          display: flex !important;
-        }
-      `}</style>
+      <style>{`[data-testid="machine-roster-card"]:hover .machine-roster-kebab { display: flex !important; }`}</style>
     </button>
   );
 }
