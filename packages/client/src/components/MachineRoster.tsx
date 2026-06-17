@@ -23,6 +23,13 @@ export interface MachineRosterProps {
   machines: MachineRosterEntry[];
   selectedMachineId?: string | null;
   onMachineSelect: (id: string | null) => void;
+  /**
+   * walle-multi-machine: compact horizontal-chip layout for mobile. The
+   * stacked desktop cards eat a full phone screen before any session is
+   * reachable; compact renders a single scrollable chip row + the Ask
+   * composer below the selected chip, keeping sessions above the fold.
+   */
+  compact?: boolean;
 }
 
 /** Derive a 2-letter abbreviation for the icon square. */
@@ -58,8 +65,41 @@ export function MachineRoster({
   machines,
   selectedMachineId,
   onMachineSelect,
+  compact = false,
 }: MachineRosterProps) {
   if (machines.length === 0) return null;
+
+  if (compact) {
+    const selected = machines.find((m) => m.id === selectedMachineId);
+    return (
+      <div data-testid="machine-roster" style={{ borderBottom: "1px solid rgba(255,255,255,0.075)" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            overflowX: "auto",
+            padding: "10px 12px",
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+          }}
+        >
+          {machines.map((m) => (
+            <MachineChip
+              key={m.id}
+              machine={m}
+              active={selectedMachineId === m.id}
+              onClick={() => onMachineSelect(selectedMachineId === m.id ? null : m.id)}
+            />
+          ))}
+        </div>
+        {selected && selected.messageable && (
+          <div style={{ padding: "0 12px 4px" }}>
+            <MachineComposer machine={selected} />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Group by owner for multi-tenant separation.
   const grouped = groupByOwner(machines);
@@ -416,5 +456,51 @@ function MachineComposer({ machine }: { machine: MachineRosterEntry }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * walle-multi-machine: compact machine chip for the mobile horizontal strip.
+ * Accent-tinted when active; status dot + label + alive-session count. Tap
+ * toggles selection (filters the session list to this machine).
+ */
+function MachineChip({
+  machine,
+  active,
+  onClick,
+}: {
+  machine: MachineRosterEntry;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const accent = machine.accent || "#5b6470";
+  return (
+    <button
+      onClick={onClick}
+      title={`${machine.label} · ${STATUS_LABELS[machine.status]}`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        flexShrink: 0,
+        padding: "7px 12px",
+        borderRadius: 9,
+        whiteSpace: "nowrap",
+        cursor: "pointer",
+        border: active ? `1px solid ${accent}66` : "1px solid rgba(255,255,255,0.08)",
+        background: active ? `${accent}1f` : "rgba(255,255,255,0.025)",
+        color: "var(--text-primary, #e6e6e9)",
+        fontSize: 12.5,
+        lineHeight: 1,
+      }}
+    >
+      <StatusDot status={machine.status} />
+      <span style={{ fontWeight: 600 }}>{machine.label}</span>
+      {machine.sessionCount > 0 && (
+        <span style={{ fontSize: 11, color: "var(--text-tertiary, #707078)" }}>
+          {machine.sessionCount}
+        </span>
+      )}
+    </button>
   );
 }

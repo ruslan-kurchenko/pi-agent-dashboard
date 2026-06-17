@@ -82,6 +82,8 @@ export interface CommandPaletteProps {
   onSpawn: (cwd: string, machineId: string) => void;
   /** Render the bottom-sheet variant and expose the FAB entry point. */
   mobile?: boolean;
+  /** walle-multi-machine: hide the mobile FAB (e.g. while a session detail is open). */
+  hideFab?: boolean;
   /**
    * Optional toast emitter. Called after a successful submit with
    * `Spawning on <label>…`. Falls back to `console.info` when omitted.
@@ -98,6 +100,12 @@ export function CommandPalette({
   recentCwdsForMachine,
   onSpawn,
   mobile = false,
+  /**
+   * walle-multi-machine: suppress the mobile FAB (e.g. while a session
+   * detail is open, where the FAB overlapped the message composer and the
+   * composer — not spawning — is the relevant action).
+   */
+  hideFab = false,
   onToast,
 }: CommandPaletteProps) {
   const [step, setStep] = useState<Step>("machine");
@@ -278,7 +286,7 @@ export function CommandPalette({
 
   return (
     <>
-      {mobile && !open && fabAccent ? (
+      {mobile && !open && !hideFab && fabAccent ? (
         <button
           type="button"
           onClick={onOpen}

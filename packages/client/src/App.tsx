@@ -1223,6 +1223,7 @@ export default function App() {
       machines={rosterMachines}
       selectedMachineId={selectedMachineId}
       onMachineSelect={setSelectedMachineId}
+      compact={isMobile}
     />
   );
 
@@ -1263,6 +1264,7 @@ export default function App() {
         handleSpawnSession(cwd, undefined, { machineId })
       }
       mobile={isMobile}
+      hideFab={!!selectedId}
       onToast={(text) => showToast(text, "info")}
     />
   );
@@ -1814,8 +1816,10 @@ export default function App() {
           }}
           listPanel={
             <div className="flex flex-col h-full">
+              {/* walle-multi-machine: InstallBanner stays (PWA add-to-home is useful
+                  on mobile). MissingRequiredBanner is desktop-only — on a phone it
+                  ate ~120px of the first screen and pushed sessions below the fold. */}
               <InstallBanner canInstall={installPrompt.canInstall} isIOS={installPrompt.isIOS} isInstalled={installPrompt.isInstalled} prompt={installPrompt.prompt} />
-              <MissingRequiredBanner />
               {connectionBanner}
               {machineRoster}
               {sessionList}
