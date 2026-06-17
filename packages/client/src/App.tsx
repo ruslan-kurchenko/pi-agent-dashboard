@@ -7,6 +7,7 @@ import { useCollapsibleColumn } from "./hooks/useCollapsibleColumn.js";
 import { useDocumentTitle } from "./hooks/useDocumentTitle.js";
 import { SessionList } from "./components/SessionList.js";
 import { CollapsibleRosterColumn } from "./components/CollapsibleRosterColumn.js";
+import { MachineRoster } from "./components/MachineRoster.js";
 import { useMachineRoster } from "./hooks/useMachineRoster.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { ResizableSidebar } from "./components/ResizableSidebar.js";
