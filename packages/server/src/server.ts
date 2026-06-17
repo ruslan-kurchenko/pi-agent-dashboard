@@ -72,6 +72,7 @@ import { createEditorManager, type EditorManager } from "./editor-manager.js";
 import { createEditorPidRegistry } from "./editor-pid-registry.js";
 import { registerEditorRoutes } from "./routes/editor-routes.js";
 import { registerKnownServersRoutes } from "./routes/known-servers-routes.js";
+import { registerMachinesRoutes } from "./routes/machines-routes.js";
 import { registerPluginConfigRoutes } from "./routes/plugin-config-routes.js";
 import { registerPreferencesDisplayRoutes } from "./routes/preferences-display-routes.js";
 import { registerPluginActivationRoutes } from "./routes/plugin-activation-routes.js";
@@ -874,6 +875,14 @@ export async function createServer(config: ServerConfig): Promise<DashboardServe
 
   registerProviderAuthRoutes(fastify, { piGateway, browserGateway });
   registerKnownServersRoutes(fastify, { networkGuard, getPeerServers: () => peerServers });
+  // walle-multi-machine: multi-machine roster surfaced to the sidebar.
+  // Liveness recomputed per request from sessionManager.listAll();
+  // `machines_changed` WS frames fire on every POST/DELETE mutation.
+  registerMachinesRoutes(fastify, {
+    networkGuard,
+    sessionManager,
+    broadcast: (msg) => browserGateway.broadcastToAll(msg),
+  });
   registerPluginConfigRoutes(fastify, {
     networkGuard,
     broadcast: (msg) => browserGateway.broadcast(msg),

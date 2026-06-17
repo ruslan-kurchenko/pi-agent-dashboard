@@ -5,6 +5,8 @@ import { setInitSender } from "./lib/worktree-init-bus.js";
 import { useSidebarState } from "./hooks/useSidebarState.js";
 import { useDocumentTitle } from "./hooks/useDocumentTitle.js";
 import { SessionList } from "./components/SessionList.js";
+import { MachineRoster } from "./components/MachineRoster.js";
+import { useMachineRoster } from "./hooks/useMachineRoster.js";
 import { ResizableSidebar } from "./components/ResizableSidebar.js";
 import { HamburgerButton, MobileOverlay } from "./components/MobileOverlay.js";
 import { MobileShell } from "./components/MobileShell.js";
@@ -295,6 +297,16 @@ export default function App() {
     setInitSender(send);
     return () => setInitSender(null);
   }, [send]);
+
+  // Machine roster — Phase 2 of walle-multi-machine. Lives ABOVE the
+  // session list when the operator has configured one. The hook drives
+  // GET /api/machines + the `machines_changed` WS frame; the App
+  // owns the selectedMachineId state so it can flow into SessionList
+  // as `machineFilter`. Empty roster ⇒ component renders nothing,
+  // sidebar stays byte-identical to the upstream layout.
+  // See change: walle-multi-machine.
+  const { machines: rosterMachines } = useMachineRoster(onMessage);
+  const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
   // Drives the slot-registry enable filter from /api/health.plugins[] +
   // plugin_config_update broadcasts. The returned `startedAt` is also
   // consumed inside the Plugins tab via this same hook re-call, so we don't
@@ -1166,6 +1178,7 @@ export default function App() {
       editorAvailable={editorAvailable}
       gitWorktreeEnabled={gitWorktreeEnabled}
       spawnDisabled={spawnDisabled}
+      machineFilter={selectedMachineId ?? undefined}
       errorSessionIds={errorSessionIds}
       retrySessionIds={retrySessionIds}
       spawnErrors={spawnErrors}
@@ -1185,6 +1198,20 @@ export default function App() {
           />
         </div>
       }
+    />
+  );
+
+  // Machine roster — Phase 2 of walle-multi-machine. Sits ABOVE the
+  // session list in every sidebar render site (mobile listPanel,
+  // desktop ResizableSidebar, mobile overlay). Renders nothing when
+  // the roster is empty, so single-machine installs see no chrome
+  // change.
+  // See change: walle-multi-machine.
+  const machineRoster = (
+    <MachineRoster
+      machines={rosterMachines}
+      selectedMachineId={selectedMachineId}
+      onMachineSelect={setSelectedMachineId}
     />
   );
 
@@ -1737,6 +1764,7 @@ export default function App() {
               <InstallBanner canInstall={installPrompt.canInstall} isIOS={installPrompt.isIOS} isInstalled={installPrompt.isInstalled} prompt={installPrompt.prompt} />
               <MissingRequiredBanner />
               {connectionBanner}
+              {machineRoster}
               {sessionList}
             </div>
           }
@@ -1841,12 +1869,14 @@ export default function App() {
     <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
       <div className="hidden md:flex">
         <ResizableSidebar sidebar={sidebar}>
+          {machineRoster}
           {sessionList}
         </ResizableSidebar>
       </div>
 
       <HamburgerButton onClick={() => setMobileOpen(true)} />
       <MobileOverlay open={mobileOpen} onClose={() => setMobileOpen(false)}>
+        {machineRoster}
         {sessionList}
       </MobileOverlay>
 

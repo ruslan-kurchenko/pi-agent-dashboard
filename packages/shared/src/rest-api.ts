@@ -457,6 +457,53 @@ export interface NetworkInterface {
   cidr: string;
 }
 
+// ── Machines (walle-multi-machine) ────────────────────────────
+// Multi-machine roster surfaced by `GET/POST/DELETE /api/machines` and the
+// `machines_changed` WS broadcast. Backs the dashboard sidebar's per-machine
+// chips + status dots. See change: walle-multi-machine.
+
+import type { MachineEntry } from "./config.js";
+export type { MachineEntry } from "./config.js";
+
+/**
+ * Live status of a configured machine, derived server-side from the session
+ * registry. `unreachable` is reserved for Phase 4 (host configured but TCP
+ * probe fails); the GET handler only emits the first three today.
+ */
+export type MachineStatus = "online" | "idle" | "offline" | "unreachable";
+
+/**
+ * A configured machine plus computed liveness data. Returned by
+ * `GET /api/machines` and embedded in the `machines_changed` WS frame.
+ */
+export interface MachineRosterEntry extends MachineEntry {
+  /**
+   * `online`: at least one alive session with `machine.id === entry.id`
+   * registered within the last 5 min.
+   * `idle`: any session referencing this id seen within the last 30 min.
+   * `offline`: otherwise (includes entries that come purely from config
+   * with no sessions ever recorded against them).
+   */
+  status: MachineStatus;
+  /** Number of alive (status !== "ended") sessions tagged with this machine id. */
+  sessionCount: number;
+  /** ISO timestamp of the most recent activity on any matching session, if any. */
+  lastSeenAt?: string;
+}
+
+export type ListMachinesResponse = ApiResponse<{ machines: MachineRosterEntry[] }>;
+
+/**
+ * WS frame broadcast to every dashboard client whenever the machine roster
+ * mutates: `POST`/`DELETE /api/machines` succeeded, or a `session_register`
+ * surfaced a previously-unseen `machine.id`. Payload mirrors the
+ * `GET /api/machines` response data, computed at broadcast time.
+ */
+export interface MachinesChangedMessage {
+  type: "machines_changed";
+  machines: MachineRosterEntry[];
+}
+
 // ── Recommended extensions ───────────────────────────
 
 export type ListRecommendedExtensionsResponse = ApiResponse<{

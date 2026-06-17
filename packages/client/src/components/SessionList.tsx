@@ -168,6 +168,18 @@ interface Props {
   gitWorktreeEnabled?: boolean;
   /** Monitor-only mode: hides all spawn affordances. */
   spawnDisabled?: boolean;
+  /**
+   * When set, narrow the rendered session list to sessions whose
+   * `session.machine?.id` matches this id. Wired to the
+   * `<MachineRoster>` selection in the App-level sidebar.
+   *
+   * `undefined` (default) means "no machine filter applied" — the
+   * upstream layout is unchanged for users who haven't configured a
+   * machine roster.
+   *
+   * See change: walle-multi-machine.
+   */
+  machineFilter?: string;
 }
 
 // Re-export for backwards compatibility
@@ -196,7 +208,7 @@ function ToggleButton({
   );
 }
 
-export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, openspecMap, openspecGroupsMap, sessionOrderMap, onReorderSessions, onSendPrompt, onOpenSpecRefresh, onAttachProposal, onDetachProposal, onBulkArchive, onReadArtifact, onOpenPiResources, onRename, onShutdown, onResume, onResumeKeepPosition, onHideSession, onUnhideSession, onSpawnSession, spawningCwds, addSpawningCwd, clearSpawningCwd, spawnResult, onSpawnResultSeen, pinnedDirectories, onPinDirectory, onOpenPinDialog, onUnpinDirectory, onReorderPinnedDirs, workspaces, onCreateWorkspace, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceCollapsed, onAddFolderToWorkspace, onRemoveFolderFromWorkspace, terminals, onKillTerminal, onRenameTerminal, onCollapseSidebar, commandsMap, onKillProcess, onSetProcessDrawer, inflightBashMap, onAbortTool, onOpenSpecs, onOpenArchive, onOpenBoard, onViewReadme, onOpenTerminals, onOpenEditor, editorStatuses, editorAvailable, headerExtra, errorSessionIds, retrySessionIds, spawnErrors, onDismissSpawnError, resumeErrors, onDismissResumeError, gitWorktreeEnabled: gitWorktreeEnabledProp, spawnDisabled }: Props) {
+export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, openspecMap, openspecGroupsMap, sessionOrderMap, onReorderSessions, onSendPrompt, onOpenSpecRefresh, onAttachProposal, onDetachProposal, onBulkArchive, onReadArtifact, onOpenPiResources, onRename, onShutdown, onResume, onResumeKeepPosition, onHideSession, onUnhideSession, onSpawnSession, spawningCwds, addSpawningCwd, clearSpawningCwd, spawnResult, onSpawnResultSeen, pinnedDirectories, onPinDirectory, onOpenPinDialog, onUnpinDirectory, onReorderPinnedDirs, workspaces, onCreateWorkspace, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceCollapsed, onAddFolderToWorkspace, onRemoveFolderFromWorkspace, terminals, onKillTerminal, onRenameTerminal, onCollapseSidebar, commandsMap, onKillProcess, onSetProcessDrawer, inflightBashMap, onAbortTool, onOpenSpecs, onOpenArchive, onOpenBoard, onViewReadme, onOpenTerminals, onOpenEditor, editorStatuses, editorAvailable, headerExtra, errorSessionIds, retrySessionIds, spawnErrors, onDismissSpawnError, resumeErrors, onDismissResumeError, gitWorktreeEnabled: gitWorktreeEnabledProp, spawnDisabled, machineFilter }: Props) {
   // UI preference flag, default-on. Gates folder `+Worktree` and per-change
   // `⥂2+` buttons. See change: openspec-worktree-spawn-button.
   const gitWorktreeEnabled = gitWorktreeEnabledProp ?? true;
@@ -368,9 +380,19 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
   // `filterSessions` is called with `activeOnly: false` permanently —
   // active-first ranking now happens per-folder via `rankActiveFirst`,
   // so the global "hide ended" pre-filter is unnecessary.
+  //
+  // `machineFilter`, when set, narrows the list to sessions whose
+  // `session.machine?.id` matches. Sessions without an attached machine
+  // are dropped while a filter is active — they belong to the upstream
+  // single-machine path, not to any roster entry.
+  // See change: walle-multi-machine.
   const filteredSessions = useMemo(
-    () => filterSessions(sessions, false, showHidden),
-    [sessions, showHidden],
+    () => {
+      const base = filterSessions(sessions, false, showHidden);
+      if (!machineFilter) return base;
+      return base.filter((s) => s.machine?.id === machineFilter);
+    },
+    [sessions, showHidden, machineFilter],
   );
 
   const hiddenCount = useMemo(

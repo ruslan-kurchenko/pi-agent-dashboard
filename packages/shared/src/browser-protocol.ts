@@ -23,6 +23,10 @@ import type {
 import type { TerminalSession } from "./terminal-types.js";
 import type { EditorInstanceStatus } from "./editor-types.js";
 import type { DisplayPrefs, PartialDisplayPrefs } from "./display-prefs.js";
+// MachinesChangedMessage (walle-multi-machine) is co-located with the REST
+// machine roster DTOs in `rest-api.ts` so REST and WS consumers share one
+// source of truth.
+import type { MachinesChangedMessage } from "./rest-api.js";
 
 // Batch ask_user contracts live in protocol.ts; re-export so browser-side
 // consumers import from one place. See change: redesign-ask-user-question-cards.
@@ -729,7 +733,8 @@ export type ServerToBrowserMessage =
   | PluginEventBroadcast
   | DisplayPrefsUpdatedMessage
   | QueueUpdateToBrowserMessage
-  | ViewMessagesUpdateMessage;
+  | ViewMessagesUpdateMessage
+  | MachinesChangedMessage;
 
 // ── Browser → Server ────────────────────────────────────────────────
 
