@@ -1,0 +1,196 @@
+/* ================================================================
+   wall-e SOTA theme override
+   ================================================================
+   Remaps upstream pi-dashboard CSS custom properties to the curated
+   warm-gray calm-density palette from mockups/walle-multi-machine/.
+
+   Inspired by: Linear March-2026, Tailscale admin, GitHub Codespaces,
+   Docker Desktop session rows.
+
+   Injected via @import in index.css. Override order: this file loads
+   AFTER the base :root block, so specificity wins by cascade position.
+
+   See change: walle-multi-machine (SOTA UI).
+   ================================================================ */
+
+/* ── Dark mode (default) ─────────────────────────────────────── */
+:root {
+  /* Background ramp — warmer, tighter steps than upstream */
+  --bg-primary:   #0c0c0e;     /* page — near-black with warm tint */
+  --bg-secondary: #121214;     /* sidebar panels */
+  --bg-tertiary:  #1a1a1f;     /* cards, inputs, selected items */
+  --bg-surface:   #242429;     /* badges, buttons, elevated */
+  --bg-hover:     rgba(255, 255, 255, 0.035);
+  --bg-selected:  #1e1e24;
+  --bg-code:      #16161b;     /* code blocks — dimmer than cards */
+  --bg-overlay:   rgba(0, 0, 0, 0.65);
+
+  /* Text — warmer whites, tighter ramp */
+  --text-primary:   #ececef;
+  --text-secondary: #a8a8b0;
+  --text-tertiary:  #707078;
+  --text-muted:     #4a4a52;
+  --text-faint:     #333338;
+
+  /* Borders — softer, lower alpha than upstream */
+  --border-primary:   rgba(255, 255, 255, 0.065);
+  --border-secondary: rgba(255, 255, 255, 0.045);
+  --border-subtle:    rgba(255, 255, 255, 0.03);
+
+  /* Accents — muted, never neon */
+  --accent-green:  #5ed09a;    /* sage — running */
+  --accent-yellow: #e9c46a;    /* warm yellow — streaming */
+  --accent-red:    #e57373;    /* warm red — error */
+  --accent-purple: #c7a9ec;    /* dusty lilac — needs input */
+  --accent-orange: #f0a868;    /* amber */
+  --accent-blue:   #6ba3d6;    /* steel blue — calmer than upstream */
+  --accent-primary:#6ba3d6;
+  --link:          #7bb4e0;
+  --link-hover:    #9fc9ed;
+
+  /* Shadows — softer */
+  --shadow-card: rgba(0, 0, 0, 0.25);
+
+  /* Neon ring — toned way down for calm aesthetic */
+  --neon-rim-alpha:   0.18;
+  --neon-glow-alpha:  0.04;
+  --neon-glow-blur:   6px;
+  --neon-glow-opacity:0.2;
+  --neon-bg-tint:     rgba(107, 163, 214, 0.015);
+}
+
+/* ── Typography ──────────────────────────────────────────────── */
+html {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss03', 'cv01';
+  -webkit-font-smoothing: antialiased;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+code, pre, .font-mono, [class*="monospace"] {
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace !important;
+  font-feature-settings: 'tnum';
+}
+
+/* ── Session card refinements ────────────────────────────────── */
+
+/* Card backgrounds — warmer */
+[data-testid="session-card"],
+.session-card {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-secondary) !important;
+  border-radius: 8px !important;
+  transition: background 120ms, border-color 120ms !important;
+}
+
+[data-testid="session-card"]:hover,
+.session-card:hover {
+  background: var(--bg-surface) !important;
+  border-color: var(--border-primary) !important;
+}
+
+/* Calmer selected ring — no rotating neon, just a soft accent border */
+.card-selected-ring::before,
+.card-selected-ring::after {
+  opacity: 0.25 !important;
+}
+
+/* ── Sidebar refinements ─────────────────────────────────────── */
+
+/* Sidebar background — slightly dimmer than content */
+[class*="sidebar"],
+[data-testid="sidebar"],
+aside {
+  background: var(--bg-secondary) !important;
+}
+
+/* Session group headers */
+[data-testid="session-group-header"] {
+  font-size: 10px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  color: var(--text-tertiary) !important;
+  font-weight: 600 !important;
+}
+
+/* ── Toolbar / topbar ────────────────────────────────────────── */
+
+/* Top navigation bar */
+header, nav, [class*="toolbar"], [class*="topbar"] {
+  border-bottom-color: var(--border-secondary) !important;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+
+/* Primary buttons — steel blue instead of vivid blue */
+button[class*="primary"],
+[class*="btn-primary"] {
+  background: var(--accent-primary) !important;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ── Status color overrides (global) ─────────────────────────── */
+
+/* Running / active — sage green with glow */
+[class*="text-green"], [class*="bg-green"] {
+  --tw-text-opacity: 1;
+}
+
+/* Streaming — warm yellow instead of vivid */
+[data-status="streaming"] {
+  color: #e9c46a !important;
+}
+
+/* Needs input — dusty lilac */
+[data-status="waiting_for_input"],
+[data-status="needs_input"] {
+  color: #c7a9ec !important;
+}
+
+/* ── Content area ────────────────────────────────────────────── */
+
+/* Main content pane — slightly lighter than sidebar for depth */
+main, [class*="content-area"], [class*="main-content"] {
+  background: #14141a !important;
+}
+
+/* ── Welcome / onboarding cards ──────────────────────────────── */
+[class*="onboarding"], [class*="welcome"] {
+  border-color: var(--border-secondary) !important;
+  background: var(--bg-tertiary) !important;
+  border-radius: 10px !important;
+}
+
+/* ── Animation preference ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .card-working-pulse,
+  .card-unread-pulse,
+  .card-input-pulse,
+  .card-selected-ring::before,
+  .card-selected-ring::after {
+    animation: none !important;
+  }
+}
+
+/* ── Mobile adjustments ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
+}

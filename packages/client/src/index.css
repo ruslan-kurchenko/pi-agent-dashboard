@@ -445,3 +445,9 @@ mark.markdown-search-highlight-active {
   .board-crumb-dim { display: none; }
   .board-column { flex: 1 1 100%; }
 }
+
+/* ── wall-e SOTA theme override ──────────────────────────────────
+   Loads AFTER all base styles so cascade position wins. Remaps the
+   upstream design tokens to the curated warm-gray calm-density palette.
+   See change: walle-multi-machine (SOTA UI). */
+@import "./walle-theme.css";
