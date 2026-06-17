@@ -205,7 +205,7 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
         width: 3, borderRadius: 3, background: accent,
       }} />
 
-      {/* Row 1: icon + name + count */}
+      {/* Row 1: icon + name */}
       <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         <span
           aria-hidden="true"
@@ -230,28 +230,28 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
         }}>
           {machine.label}
         </span>
-        <span data-testid="machine-roster-count" style={{
-          color: machine.sessionCount > 0 ? "var(--text-primary, #eaeaec)" : "var(--text-muted, #44444c)",
-          fontWeight: 500, fontSize: 12, fontVariantNumeric: "tabular-nums", flexShrink: 0,
-        }}>
-          {machine.sessionCount > 0 ? machine.sessionCount : "—"}
-        </span>
       </span>
 
-      {/* Row 2: role · ● status · last seen */}
+      {/* Row 2: ● status · time (left)  ——  count (right) */}
       <span data-testid="machine-roster-sub" style={{
         display: "flex", alignItems: "center", gap: 5,
         paddingLeft: 30,
         color: "var(--text-tertiary, #6a6a74)", fontSize: 11, lineHeight: 1.2,
       }}>
-        {machine.role && (
-          <><span>{machine.role}</span><span style={{ opacity: 0.35 }}>·</span></>
-        )}
         <StatusDot status={status} />
         <span>{statusLabel}</span>
         {lastSeen && (
           <><span style={{ opacity: 0.35 }}>·</span><span>{lastSeen}</span></>
         )}
+        <span style={{ flex: 1 }} />
+        <span data-testid="machine-roster-count" style={{
+          color: machine.sessionCount > 0 ? "var(--text-secondary, #a0a0a8)" : "var(--text-muted, #44444c)",
+          fontSize: 11, fontVariantNumeric: "tabular-nums", flexShrink: 0,
+        }}>
+          {machine.sessionCount > 0
+            ? `${machine.sessionCount} ${machine.sessionCount === 1 ? "session" : "sessions"}`
+            : "—"}
+        </span>
       </span>
 
       {/* Kebab (hover-only) */}
