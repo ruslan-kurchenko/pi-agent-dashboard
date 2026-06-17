@@ -232,25 +232,23 @@ function MachineRosterCard({ machine, active, onClick }: CardProps) {
         </span>
       </span>
 
-      {/* Row 2: ● status · time (left)  ——  count (right) */}
+      {/* Row 2+: status, time, sessions — stacked vertically under the name */}
       <span data-testid="machine-roster-sub" style={{
-        display: "flex", alignItems: "center", gap: 5,
+        display: "flex", flexDirection: "column", gap: 1,
         paddingLeft: 30,
-        color: "var(--text-tertiary, #6a6a74)", fontSize: 11, lineHeight: 1.2,
+        color: "var(--text-tertiary, #6a6a74)", fontSize: 11, lineHeight: 1.3,
       }}>
-        <StatusDot status={status} />
-        <span>{statusLabel}</span>
-        {lastSeen && (
-          <><span style={{ opacity: 0.35 }}>·</span><span>{lastSeen}</span></>
-        )}
-        <span style={{ flex: 1 }} />
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <StatusDot status={status} />
+          <span>{statusLabel}</span>
+        </span>
+        {lastSeen && <span>{lastSeen}</span>}
         <span data-testid="machine-roster-count" style={{
           color: machine.sessionCount > 0 ? "var(--text-secondary, #a0a0a8)" : "var(--text-muted, #44444c)",
-          fontSize: 11, fontVariantNumeric: "tabular-nums", flexShrink: 0,
         }}>
           {machine.sessionCount > 0
             ? `${machine.sessionCount} ${machine.sessionCount === 1 ? "session" : "sessions"}`
-            : "—"}
+            : "no sessions"}
         </span>
       </span>
 
