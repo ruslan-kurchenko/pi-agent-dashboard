@@ -10,6 +10,8 @@ import { ConnectionManager } from "./connection.js";
 import { detectSessionSource } from "./source-detector.js";
 import { buildVisibilityRegisterFields } from "./visibility-intent.js";
 import { buildWalleMachineFields } from "./walle-machine-fields.js";
+import { buildBridgeAuthHeader, createAuthedWebSocketImpl } from "./walle-bridge-auth.js";
+import { WebSocket as NodeWebSocket } from "ws";
 import { mapEventToProtocol } from "./event-forwarder.js";
 import { createCommandHandler } from "./command-handler.js";
 import { shouldApplyDefaultModel } from "./bridge-default-model-gate.js";
@@ -632,6 +634,21 @@ function initBridge(pi: ExtensionAPI) {
   const config = loadConfig();
   const dashboardUrl = process.env.PI_DASHBOARD_URL ?? `ws://localhost:${config.piPort}`;
 
+  // walle-multi-machine: when wall-e provisioned this machine, the
+  // launcher sets WALLE_MACHINE_ID + WALLE_MACHINE_BRIDGE_TOKEN. We then
+  // attach `Authorization: Bearer <base64url({machineId, token})>` to the
+  // WebSocket handshake so pi-gateway's `verifyClient` can authenticate
+  // non-loopback bridges. Single-machine / upstream installs leave the
+  // env unset; we fall back to the unauthenticated handshake and
+  // pi-gateway accepts loopback connections without a header.
+  const walleAuthHeader = buildBridgeAuthHeader(process.env);
+  const walleWebSocketImpl = walleAuthHeader
+    ? createAuthedWebSocketImpl(
+        NodeWebSocket as unknown as Parameters<typeof createAuthedWebSocketImpl>[0],
+        walleAuthHeader as unknown as Record<string, string>,
+      )
+    : undefined;
+
   // Long-lived ctx wrapper for the Extension UI System (Phase 1) — see
   // change: add-extension-ui-modal. `getSessionId` reads the closed-over
   // `sessionId` so the helper always uses the current value (which is
@@ -644,6 +661,7 @@ function initBridge(pi: ExtensionAPI) {
 
   const connection = new ConnectionManager({
     url: dashboardUrl,
+    ...(walleWebSocketImpl ? { WebSocketImpl: walleWebSocketImpl } : {}),
     onMessage: safe(async (data: unknown) => {
       if (!isActive()) return; // Stale listener guard
       const msg = data as ServerToExtensionMessage;

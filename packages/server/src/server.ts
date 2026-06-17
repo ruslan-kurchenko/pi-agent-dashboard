@@ -474,6 +474,10 @@ export async function createServer(config: ServerConfig): Promise<DashboardServe
 
   const piGateway = createPiGateway(sessionManager, {
     ...(config.pingInterval !== undefined ? { pingInterval: config.pingInterval } : {}),
+    // walle-multi-machine: re-read config per upgrade so a `POST
+    // /api/machines` adding a freshly-provisioned laptop takes effect
+    // without a restart. `loadConfig()` is fs-cheap (<1ms).
+    getMachines: () => loadConfig().machines,
   });
 
   // Create event store with pinning callback and configurable limits

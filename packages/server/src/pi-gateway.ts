@@ -4,8 +4,10 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { ExtensionToServerMessage, ServerToExtensionMessage } from "@blackbelt-technology/pi-dashboard-shared/protocol.js";
 import type { DashboardSession } from "@blackbelt-technology/pi-dashboard-shared/types.js";
+import type { MachineEntry } from "@blackbelt-technology/pi-dashboard-shared/config.js";
 import type { SessionManager } from "./memory-session-manager.js";
 import { getSpawnRegisterWatchdog } from "./spawn-register-watchdog.js";
+import { verifyBridgeUpgrade, type RejectReason } from "./pi-gateway-auth.js";
 
 export const HEARTBEAT_TIMEOUT = 180_000;
 export const WS_PING_INTERVAL = 60_000;
@@ -13,6 +15,22 @@ export const WS_PING_INTERVAL = 60_000;
 export interface PiGatewayOptions {
   heartbeatTimeout?: number;
   pingInterval?: number;
+  /**
+   * walle-multi-machine: source-of-truth for the operator-curated machine
+   * roster used by the non-loopback `verifyClient` token gate. Called once
+   * per upgrade so it stays cheap to re-read config on each connect.
+   * Returns `[]` (the default) for upstream installs that keep
+   * loopback-only behaviour.
+   */
+  getMachines?: () => readonly MachineEntry[];
+  /**
+   * walle-multi-machine: shared bridge HMAC secret. When `undefined` /
+   * empty, the gate fails open and emits `dashboard.security.WARN
+   * bridge-secret-unset` on every non-loopback connection so unmigrated
+   * installs keep working but the operator notices. Defaults to reading
+   * `WALLE_DASHBOARD_BRIDGE_SECRET` from `process.env`.
+   */
+  getBridgeSecret?: () => string | undefined;
 }
 
 export interface PiGateway {
@@ -194,7 +212,44 @@ export function createPiGateway(
       return null;
     },
     start(port: number) {
-      wss = new WebSocketServer({ port });
+      // walle-multi-machine: token gate on the upgrade. Loopback always
+      // passes; non-loopback requires a Bearer token whose HMAC matches
+      // the operator-curated roster. Fail-open with WARN when
+      // `WALLE_DASHBOARD_BRIDGE_SECRET` is unset.
+      const getMachines = options?.getMachines;
+      const getBridgeSecret =
+        options?.getBridgeSecret ?? (() => process.env.WALLE_DASHBOARD_BRIDGE_SECRET);
+      // Stamps the upgrade `IncomingMessage` with the verified machineId so
+      // the `connection` handler can read it without re-parsing the bearer.
+      wss = new WebSocketServer({
+        port,
+        verifyClient: (info, cb) => {
+          const remoteAddress = info.req.socket.remoteAddress;
+          const result = verifyBridgeUpgrade(
+            { remoteAddress, authorization: info.req.headers.authorization },
+            {
+              machines: getMachines?.() ?? [],
+              secret: getBridgeSecret(),
+            },
+          );
+          if (!result.ok) {
+            const reason: RejectReason = result.reason;
+            console.error(
+              `[gateway] reject upgrade from ${remoteAddress ?? "?"}: ${result.code} ${result.message} (${reason})`,
+            );
+            cb(false, result.code, result.message);
+            return;
+          }
+          if (result.bypass === "secret-unset") {
+            console.error(
+              `dashboard.security.WARN bridge-secret-unset remote=${remoteAddress ?? "?"} machineId=${result.machineId ?? "?"} — set WALLE_DASHBOARD_BRIDGE_SECRET to enforce gate`,
+            );
+          }
+          (info.req as unknown as { walleMachineId?: string | null }).walleMachineId =
+            result.machineId;
+          cb(true);
+        },
+      });
 
       // WS-level ping/pong: detect truly dead connections.
       // Pong responses are processed in the event loop, so a busy bridge
@@ -244,7 +299,14 @@ export function createPiGateway(
         }
       }, pingMs);
 
-      wss.on("connection", (ws) => {
+      wss.on("connection", (ws, req) => {
+        // walle-multi-machine: pre-filled by `verifyClient`. Null on the
+        // loopback bypass or when the gate is fail-open without a bearer;
+        // string when the bearer authenticated. Surfaced in the
+        // `session registered` log so non-loopback connections show which
+        // operator-roster entry the bridge claims to be.
+        const connectionMachineId =
+          (req as unknown as { walleMachineId?: string | null }).walleMachineId ?? null;
         let currentSessionId: string | null = null;
         aliveMisses.set(ws, 0);
         ws.on("pong", () => { aliveMisses.set(ws, 0); });
@@ -334,7 +396,9 @@ export function createPiGateway(
                       }
                     : undefined,
               });
-              console.error(`[gateway] session registered: ${msg.sessionId} cwd=${msg.cwd}`);
+              console.error(
+                `[gateway] session registered: ${msg.sessionId} cwd=${msg.cwd}${connectionMachineId ? ` machineId=${connectionMachineId}` : ""}`,
+              );
 
               resetHeartbeat(msg.sessionId);
               onConnection?.();
