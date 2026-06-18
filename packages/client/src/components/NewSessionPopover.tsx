@@ -127,15 +127,21 @@ export function NewSessionPopover({
   const label = selectedMachine?.label ?? "?";
   const accent = selectedMachine?.accent ?? "var(--m-never, #4a4a52)";
 
-  // Reset the flow on every open: step 1, default target, recent[0] cwd.
+  // Reset the flow ONLY on the closed→open transition. Depending on `machines`
+  // /`recentCwds` directly would re-fire this on every 5s roster poll and kick
+  // the operator back to step 1 mid-flow (caught in live E2E). The ref guard
+  // lets the deps stay exhaustive while resetting just once per open.
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (!open) return;
-    setStep("machine");
-    setMachineIdx(defaultIdx);
-    const m = machines[defaultIdx];
-    const recent = m ? recentCwds(m.id) : [];
-    setCwd(recent[0] ?? "");
-    setPrompt("");
+    if (open && !wasOpenRef.current) {
+      setStep("machine");
+      setMachineIdx(defaultIdx);
+      const m = machines[defaultIdx];
+      const recent = m ? recentCwds(m.id) : [];
+      setCwd(recent[0] ?? "");
+      setPrompt("");
+    }
+    wasOpenRef.current = open;
   }, [open, defaultIdx, machines, recentCwds]);
 
   // Snapshot the active element on open, restore on close.
