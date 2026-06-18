@@ -7,7 +7,10 @@
  * `--mode rpc`) detached with `stdio:"ignore"` — a TTY-less TUI zombie that
  * registers but never creates a session. The arg-builder must now ALWAYS emit
  * `--mode rpc` (headless), `--cwd` for omp only, `--model`/`--thinking` only
- * when provided, and the prompt LAST. See change: dashboard-session-model-select.
+ * when provided. The first prompt is NOT a positional arg — `--mode rpc`
+ * ignores positional messages; it is delivered via the PI_DASHBOARD_INITIAL_PROMPT
+ * env var and injected in-process by the spawned agent's extension. See change:
+ * dashboard-session-model-select.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -39,18 +42,14 @@ describe("local-agent-args / buildSpawnAgentArgs (omp)", () => {
     ).toEqual(["--mode", "rpc", "--cwd", "/work/repo", "--thinking", "high"]);
   });
 
-  it("appends the prompt LAST as a positional message", () => {
-    const args = buildSpawnAgentArgs("omp", { cwd: "/work/repo", prompt: "fix the flaky test" });
-    expect(args).toEqual(["--mode", "rpc", "--cwd", "/work/repo", "fix the flaky test"]);
-    expect(args[args.length - 1]).toBe("fix the flaky test");
-  });
-
-  it("orders flags then prompt: --mode rpc, --cwd, --model, --thinking, <prompt> last", () => {
+  it("never appends a positional prompt — first prompt is env-delivered, not argv", () => {
+    // `--mode rpc` ignores positional messages (verified empirically: omp boots,
+    // emits `ready`, then waits for a stdin/in-process RPC turn). The arg-builder
+    // must therefore NOT carry the prompt; PI_DASHBOARD_INITIAL_PROMPT does.
     const args = buildSpawnAgentArgs("omp", {
       cwd: "/work/repo",
       model: "openai-codex/gpt-5.5",
       thinking: "medium",
-      prompt: "do the thing",
     });
     expect(args).toEqual([
       "--mode",
@@ -61,14 +60,12 @@ describe("local-agent-args / buildSpawnAgentArgs (omp)", () => {
       "openai-codex/gpt-5.5",
       "--thinking",
       "medium",
-      "do the thing",
     ]);
-    expect(args[args.length - 1]).toBe("do the thing");
   });
 
   it("omits --model/--thinking for empty-string values (falsy guard)", () => {
     expect(
-      buildSpawnAgentArgs("omp", { cwd: "/work/repo", model: "", thinking: "", prompt: "" }),
+      buildSpawnAgentArgs("omp", { cwd: "/work/repo", model: "", thinking: "" }),
     ).toEqual(["--mode", "rpc", "--cwd", "/work/repo"]);
   });
 });
@@ -78,12 +75,11 @@ describe("local-agent-args / buildSpawnAgentArgs (pi)", () => {
     expect(buildSpawnAgentArgs("pi", { cwd: "/work/repo" })).toEqual(["--mode", "rpc"]);
   });
 
-  it("supports --model/--thinking and prompt last, still without --cwd", () => {
+  it("supports --model/--thinking, still without --cwd or any positional prompt", () => {
     const args = buildSpawnAgentArgs("pi", {
       cwd: "/work/repo",
       model: "anthropic/claude-sonnet-4-5",
       thinking: "low",
-      prompt: "hello",
     });
     expect(args).toEqual([
       "--mode",
@@ -92,10 +88,8 @@ describe("local-agent-args / buildSpawnAgentArgs (pi)", () => {
       "anthropic/claude-sonnet-4-5",
       "--thinking",
       "low",
-      "hello",
     ]);
     expect(args).not.toContain("--cwd");
-    expect(args[args.length - 1]).toBe("hello");
   });
 });
 

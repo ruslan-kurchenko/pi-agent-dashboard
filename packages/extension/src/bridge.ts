@@ -188,6 +188,11 @@ function initBridge(pi: ExtensionAPI) {
 
   let sessionId: string = prev.sessionId ?? crypto.randomUUID();
   let sessionReady = false; // true after session_start has run
+  // walle-dash-fixes: one-shot guard for delivering the New Session first
+  // prompt (PI_DASHBOARD_INITIAL_PROMPT) via pi.sendUserMessage. Per-process:
+  // a dashboard-spawned child carries the env once; reattach/reload re-run
+  // session_start but must not re-inject. See session_start handler below.
+  let initialPromptDelivered = false;
   let lastSessionFile: string | undefined;
   let lastSessionDir: string | undefined;
   let lastFirstMessage: string | undefined;
@@ -1068,16 +1073,24 @@ function initBridge(pi: ExtensionAPI) {
         ...(opts.gitWorktreeBase
           ? { PI_DASHBOARD_SPAWN_GIT_WORKTREE_BASE: opts.gitWorktreeBase }
           : {}),
+        // walle-dash-fixes: the New Session first prompt. omp/pi `--mode rpc`
+        // does NOT process a positional prompt (it waits for a stdin RPC turn),
+        // so we hand the prompt to the spawned agent via env and let ITS
+        // dashboard extension inject it in-process via pi.sendUserMessage once
+        // the session is ready (see PI_DASHBOARD_INITIAL_PROMPT in session_start).
+        ...(opts.prompt && opts.prompt.length > 0
+          ? { PI_DASHBOARD_INITIAL_PROMPT: opts.prompt }
+          : {}),
       };
       // walle-multi-machine: headless RPC spawn (`--mode rpc`), driven over the
-      // bridge WebSocket via in-process pi.sendUserMessage — NOT a TUI. A
-      // non-empty first prompt rides LAST as a positional MESSAGE. `--cwd` is
-      // omp-only; pi carries cwd via the child's working directory below.
+      // bridge WebSocket via in-process pi.sendUserMessage — NOT a TUI. The
+      // first prompt is delivered via PI_DASHBOARD_INITIAL_PROMPT (env, above),
+      // NOT a positional arg — `--mode rpc` ignores positional messages. `--cwd`
+      // is omp-only; pi carries cwd via the child's working directory below.
       const args = buildSpawnAgentArgs(provider, {
         cwd,
         model: opts.model,
         thinking: opts.thinkingLevel,
-        prompt: opts.prompt,
       });
       // stdin MUST stay open: omp/pi `--mode rpc` exit on stdin EOF. We give a
       // pipe (NOT "ignore"), never end/close it, and retain the child so the
@@ -2222,6 +2235,29 @@ function initBridge(pi: ExtensionAPI) {
       hasDefaultModel: Boolean(freshConfig.defaultModel),
     })) {
       pendingDefaultModel = applyDefaultModel();
+    }
+
+    // walle-dash-fixes: deliver the New Session first prompt. The dashboard
+    // bridge spawns this agent headless (`--mode rpc`) and hands the first
+    // prompt via PI_DASHBOARD_INITIAL_PROMPT (NOT a positional arg — `--mode
+    // rpc` ignores those, so the agent would otherwise register then sit idle).
+    // Inject it in-process via pi.sendUserMessage — the SAME path the live
+    // composer uses — exactly once, only on a brand-new session (entryCount 0).
+    // Defer a tick so session_start finishes first; clear the env so a later
+    // reload of this same process never re-injects.
+    if (!initialPromptDelivered && entryCount === 0) {
+      const firstPrompt = (process.env.PI_DASHBOARD_INITIAL_PROMPT ?? "").trim();
+      if (firstPrompt) {
+        initialPromptDelivered = true;
+        delete process.env.PI_DASHBOARD_INITIAL_PROMPT;
+        setTimeout(() => {
+          try {
+            (pi.sendUserMessage as (m: string) => void)(firstPrompt);
+          } catch (err) {
+            console.error("[dashboard] initial prompt delivery failed:", err);
+          }
+        }, 0);
+      }
     }
 
     // Send initial roles

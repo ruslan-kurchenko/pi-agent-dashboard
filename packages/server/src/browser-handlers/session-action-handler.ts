@@ -581,6 +581,15 @@ export async function handleSpawnSession(
       ...(typeof msg.gitWorktreeBase === "string" && msg.gitWorktreeBase.length > 0
         ? { gitWorktreeBase: msg.gitWorktreeBase }
         : {}),
+      // walle-dash-fixes: forward the New Session popover's first prompt so the
+      // bridge launches the local agent with it as a positional MESSAGE.
+      // Without this the remote agent spawns headless, registers, then sits
+      // idle (no turn) — the "spawns but does nothing" bug. Contract:
+      // SpawnSessionBrowserMessage.prompt → spawn_on_machine.prompt. Omitted →
+      // bare interactive spawn. See change: dashboard-session-model-select.
+      ...(typeof msg.prompt === "string" && msg.prompt.length > 0
+        ? { prompt: msg.prompt }
+        : {}),
       // walle-multi-machine: forward the per-session model + thinking level
       // chosen in the New Session popover so the bridge can launch the local
       // agent with `omp --model`/`--thinking`. Omitted → agent default.

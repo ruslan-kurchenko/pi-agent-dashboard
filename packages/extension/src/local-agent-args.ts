@@ -26,14 +26,14 @@ export interface SpawnAgentArgsOptions {
   model?: string;
   /** Optional thinking level → `--thinking <thinking>`. Omitted → agent default. */
   thinking?: string;
-  /** Optional first prompt, appended LAST as a positional MESSAGE. */
-  prompt?: string;
 }
 
 /**
  * Build the argv for a fresh headless agent spawn. Always headless
  * (`--mode rpc`); `--cwd` only for omp. `--model` / `--thinking` only when
- * provided. A non-empty prompt is appended LAST as a positional message.
+ * provided. NOTE: the first prompt is NOT passed here — `--mode rpc` ignores
+ * positional messages (it waits for a stdin/in-process RPC turn). The bridge
+ * delivers it via the PI_DASHBOARD_INITIAL_PROMPT env var instead.
  */
 export function buildSpawnAgentArgs(
   provider: AgentProvider,
@@ -45,7 +45,6 @@ export function buildSpawnAgentArgs(
     ...(provider === "omp" ? ["--cwd", opts.cwd] : []),
     ...(opts.model ? ["--model", opts.model] : []),
     ...(opts.thinking ? ["--thinking", opts.thinking] : []),
-    ...(opts.prompt ? [opts.prompt] : []),
   ];
 }
 

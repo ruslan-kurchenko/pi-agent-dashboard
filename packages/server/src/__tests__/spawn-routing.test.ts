@@ -263,6 +263,33 @@ describe("handleSpawnSession — machineId routing", () => {
     });
   });
 
+  it("forwards the first prompt into the spawn_on_machine frame when set", async () => {
+    // Regression: the New Session popover's first prompt was dropped here, so
+    // the remote agent spawned headless, registered, then sat idle (no turn).
+    process.env.WALLE_MACHINE_ID = "daemon-laptop";
+    const { ws: bridgeWs, sent: bridgeSent } = makeBridge();
+    const { ctx } = makeCtx({ bridgeForId: { "remote-mac": bridgeWs } });
+
+    await handleSpawnSession(
+      {
+        type: "spawn_session",
+        cwd: "/work/remote",
+        requestId: "req-remote-prompt",
+        machineId: "remote-mac",
+        prompt: "fix the flaky test",
+      } as never,
+      ctx,
+    );
+
+    expect(bridgeSent).toHaveLength(1);
+    expect(bridgeSent[0]).toEqual({
+      type: "spawn_on_machine",
+      requestId: "req-remote-prompt",
+      cwd: "/work/remote",
+      prompt: "fix the flaky test",
+    });
+  });
+
   it("omits model + thinkingLevel from the frame when empty or unset", async () => {
     process.env.WALLE_MACHINE_ID = "daemon-laptop";
     const { ws: bridgeWs, sent: bridgeSent } = makeBridge();
