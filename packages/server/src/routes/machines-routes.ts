@@ -294,14 +294,23 @@ export function registerMachinesRoutes(
         reply.code(501);
         return { success: false, error: "messaging is only supported on the local daemon machine" };
       }
-      const body = request.body as { text?: unknown; threadId?: unknown } | null;
+      const body = request.body as
+        | { text?: unknown; threadId?: unknown; model?: unknown; thinkingLevel?: unknown }
+        | null;
       const text = typeof body?.text === "string" ? body.text : "";
       if (!text.trim()) {
         reply.code(400);
         return { success: false, error: "text required" };
       }
       const threadId = typeof body?.threadId === "string" && body.threadId ? body.threadId : undefined;
-      const result = await injectToDaemon(text, threadId);
+      // walle-multi-machine: optional per-session model + thinking level chosen
+      // in the New Session popover. Forwarded into the `/inject` body so the
+      // daemon router carries them into the spawn. See change:
+      // dashboard-session-model-select.
+      const model = typeof body?.model === "string" && body.model ? body.model : undefined;
+      const thinkingLevel =
+        typeof body?.thinkingLevel === "string" && body.thinkingLevel ? body.thinkingLevel : undefined;
+      const result = await injectToDaemon(text, threadId, { model, thinkingLevel });
       if (!result.ok) {
         reply.code(502);
         return { success: false, error: result.error ?? "daemon inject failed" };

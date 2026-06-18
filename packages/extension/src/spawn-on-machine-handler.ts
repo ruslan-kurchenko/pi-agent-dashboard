@@ -59,7 +59,13 @@ export interface SpawnOnMachineContext {
   /** Invokes the local agent. Provider-specific (omp / pi). */
   invokeLocalAgent: (
     cwd: string,
-    opts: { attachProposal?: string; gitWorktreeBase?: string; prompt?: string },
+    opts: {
+      attachProposal?: string;
+      gitWorktreeBase?: string;
+      prompt?: string;
+      model?: string;
+      thinkingLevel?: string;
+    },
   ) => Promise<void>;
   /** Stable monotonic clock for tests. Production passes `Date.now`. */
   now: () => number;
@@ -153,6 +159,8 @@ export function createSpawnOnMachineHandler(
           attachProposal: msg.attachProposal,
           gitWorktreeBase: msg.gitWorktreeBase,
           prompt: msg.prompt,
+          model: msg.model,
+          thinkingLevel: msg.thinkingLevel,
         });
       } catch (err) {
         // invokeLocalAgent threw outright — the child won't come, so drop

@@ -134,6 +134,7 @@ export function MachineRoster({
         }}
       >
         <span>Machines</span>
+        {onAddMachine && (
         <button
           type="button"
           onClick={onAddMachine}
@@ -155,6 +156,7 @@ export function MachineRoster({
         >
           <Icon path={mdiPlus} size={0.62} />
         </button>
+        )}
       </div>
 
       {/* Cards, potentially grouped by owner */}
@@ -198,12 +200,14 @@ export function MachineRoster({
           gap: 4,
         }}
       >
+        {onAddMachine && (
         <RosterAction
           testid="machine-roster-footer-add"
           onClick={onAddMachine}
           leading={<span style={{ color: "var(--m-daemon, #5fb4a4)" }}>+</span>}
           label="Add machine…"
         />
+        )}
         <RosterAction
           testid="machine-roster-footer-config"
           onClick={onConfigureRoster}

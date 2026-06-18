@@ -58,7 +58,18 @@ import {
 import { createSpawnOnMachineHandler, type SpawnOnMachineHandler } from "./spawn-on-machine-handler.js";
 import { createResumeOnMachineHandler, type ResumeOnMachineHandler } from "./resume-on-machine-handler.js";
 import { buildDaemonThreadIdField } from "./daemon-thread-id.js";
-import { spawn as spawnChild } from "@blackbelt-technology/pi-dashboard-shared/platform/exec.js";
+import { spawn as spawnChild, type ChildProcess } from "@blackbelt-technology/pi-dashboard-shared/platform/exec.js";
+import { buildResumeAgentArgs, buildSpawnAgentArgs } from "./local-agent-args.js";
+
+/**
+ * walle-multi-machine: retains detached headless agent children spawned for
+ * cross-machine `spawn_on_machine` / `resume_on_machine`. omp/pi in
+ * `--mode rpc` exit on stdin EOF, so we give each a pipe stdin and keep the
+ * child reachable here so that pipe is never closed/GC'd. Entries self-evict
+ * on the child's `exit`. The children share THIS bridge process's lifetime
+ * (stdin closes when we exit) — acceptable for v1: no bridge ⇒ machine offline.
+ */
+const detachedAgentChildren = new Set<ChildProcess>();
 
 const HEARTBEAT_INTERVAL = 15_000;
 const GIT_POLL_INTERVAL = 30_000;
@@ -1029,9 +1040,9 @@ function initBridge(pi: ExtensionAPI) {
   //   sendUpstream     ─→ raw connection.send (bypassing our session_register
   //                       tag wrapper below; spawn_on_machine_failed messages
   //                       are unrelated and must not be touched by it).
-  //   invokeLocalAgent ─→ detached `omp run <cwd>` / `pi run <cwd>` per
-  //                       `WALLE_AGENT_PROVIDER`, the same binaries
-  //                       `scripts/wall-e/run.ts` shells out to. The child
+  //   invokeLocalAgent ─→ detached headless `omp --mode rpc --cwd <cwd>` /
+  //                       `pi --mode rpc` per `WALLE_AGENT_PROVIDER`, the same
+  //                       binaries `scripts/wall-e/run.ts` shells out to. The child
   //                       inherits our env (WALLE_MACHINE_ID,
   //                       WALLE_MACHINE_BRIDGE_TOKEN, PI_DASHBOARD_URL, …)
   //                       so its own dashboard-bridge connects back to the
@@ -1058,16 +1069,27 @@ function initBridge(pi: ExtensionAPI) {
           ? { PI_DASHBOARD_SPAWN_GIT_WORKTREE_BASE: opts.gitWorktreeBase }
           : {}),
       };
-      // walle-multi-machine: a non-empty first prompt is passed to the agent
-      // as a positional MESSAGE (`omp "<prompt>"` / `pi "<prompt>"`), the same
-      // way the launcher seeds an interactive session. Empty/omitted → bare spawn.
-      const args = opts.prompt ? [opts.prompt] : [];
+      // walle-multi-machine: headless RPC spawn (`--mode rpc`), driven over the
+      // bridge WebSocket via in-process pi.sendUserMessage — NOT a TUI. A
+      // non-empty first prompt rides LAST as a positional MESSAGE. `--cwd` is
+      // omp-only; pi carries cwd via the child's working directory below.
+      const args = buildSpawnAgentArgs(provider, {
+        cwd,
+        model: opts.model,
+        thinking: opts.thinkingLevel,
+        prompt: opts.prompt,
+      });
+      // stdin MUST stay open: omp/pi `--mode rpc` exit on stdin EOF. We give a
+      // pipe (NOT "ignore"), never end/close it, and retain the child so the
+      // pipe is not GC'd. See `detachedAgentChildren` above.
       const child = spawnChild(provider, args, {
         cwd,
         env: childEnv,
         detached: true,
-        stdio: "ignore",
+        stdio: ["pipe", "ignore", "ignore"],
       });
+      detachedAgentChildren.add(child);
+      child.once("exit", () => detachedAgentChildren.delete(child));
       child.unref();
     },
     now: () => Date.now(),
@@ -1076,10 +1098,11 @@ function initBridge(pi: ExtensionAPI) {
   // ── walle-multi-machine: resume_on_machine handler ─────────────────────
   // Sibling of spawnOnMachine for the resume verb. Same WebSocket, routed by
   // machineId. `resumeLocalAgent` shells out to a detached, provider-correct
-  // resume: omp resumes by id with `--resume=<id> --cwd <cwd>`; pi resumes by
-  // id via `--session <id>` (its `-r` is an interactive picker), with cwd
-  // carried by the child's working directory. Env inheritance matches
-  // invokeLocalAgent. `mode` rides into the pending entry; the agent CLI has
+  // resume (both headless via `--mode rpc`): omp resumes by id with
+  // `--mode rpc --resume=<id> --cwd <cwd>`; pi via `--mode rpc --session <id>`
+  // (its `-r` is an interactive picker), with cwd carried by the child's
+  // working directory. Env inheritance matches invokeLocalAgent. `mode` rides
+  // into the pending entry; the agent CLI has
   // no distinct fork flag, so v1 re-opens the session for both modes
   // (fork-vs-continue is an in-session decision).
   const resumeOnMachine: ResumeOnMachineHandler = createResumeOnMachineHandler({
@@ -1089,16 +1112,17 @@ function initBridge(pi: ExtensionAPI) {
         (process.env.WALLE_AGENT_PROVIDER ?? "omp").trim().toLowerCase() === "pi"
           ? "pi"
           : "omp";
-      const args =
-        provider === "pi"
-          ? ["--session", resumeSessionId]
-          : [`--resume=${resumeSessionId}`, "--cwd", cwd];
+      const args = buildResumeAgentArgs(provider, { resumeSessionId, cwd });
+      // Headless resume: same stdin-open requirement as invokeLocalAgent —
+      // pipe stdin, never close it, retain the child so it isn't GC'd.
       const child = spawnChild(provider, args, {
         cwd,
         env: { ...process.env },
         detached: true,
-        stdio: "ignore",
+        stdio: ["pipe", "ignore", "ignore"],
       });
+      detachedAgentChildren.add(child);
+      child.once("exit", () => detachedAgentChildren.delete(child));
       child.unref();
     },
     now: () => Date.now(),

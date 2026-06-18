@@ -581,6 +581,16 @@ export async function handleSpawnSession(
       ...(typeof msg.gitWorktreeBase === "string" && msg.gitWorktreeBase.length > 0
         ? { gitWorktreeBase: msg.gitWorktreeBase }
         : {}),
+      // walle-multi-machine: forward the per-session model + thinking level
+      // chosen in the New Session popover so the bridge can launch the local
+      // agent with `omp --model`/`--thinking`. Omitted → agent default.
+      // See change: dashboard-session-model-select.
+      ...(typeof msg.model === "string" && msg.model.length > 0
+        ? { model: msg.model }
+        : {}),
+      ...(typeof msg.thinkingLevel === "string" && msg.thinkingLevel.length > 0
+        ? { thinkingLevel: msg.thinkingLevel }
+        : {}),
     };
     bridge.send(JSON.stringify(frame));
     // Don't await `session_register` — the bridge will forward it

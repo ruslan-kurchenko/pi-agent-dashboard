@@ -46,6 +46,8 @@ export function CollapsibleRosterColumn({
   machines,
   selectedMachineId,
   onMachineSelect,
+  onConfigureRoster,
+  onAddMachine,
 }: Props) {
   if (machines.length === 0) return null;
 
@@ -143,6 +145,8 @@ export function CollapsibleRosterColumn({
         machines={machines}
         selectedMachineId={selectedMachineId}
         onMachineSelect={onMachineSelect}
+        onConfigureRoster={onConfigureRoster}
+        onAddMachine={onAddMachine}
       />
 
       {/* Collapse chevron */}

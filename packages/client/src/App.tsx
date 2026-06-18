@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useRoute, useLocation, useSearchParams, Redirect, Switch, Route } from "wouter";
 import { useWebSocket } from "./hooks/useWebSocket.js";
 import { setInitSender } from "./lib/worktree-init-bus.js";
+import { displayModel } from "./lib/format.js";
 import { useSidebarState } from "./hooks/useSidebarState.js";
 import { useCollapsibleColumn } from "./hooks/useCollapsibleColumn.js";
 import { useDocumentTitle } from "./hooks/useDocumentTitle.js";
@@ -1039,6 +1040,25 @@ export default function App() {
     rosterMachines.find((m) => m.messageable || m.role === "daemon")?.id ??
     rosterMachines[0]?.id;
 
+  // Deduped model registry across every session that has loaded a model list.
+  // Feeds the New Session model picker (#6) and the Settings default-model
+  // picker. Empty until a session reports models (the popover then falls back
+  // to its curated list).
+  const availableModels = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ provider: string; id: string }> = [];
+    for (const list of modelsMap.values()) {
+      for (const m of list) {
+        const key = `${m.provider}/${m.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push({ provider: m.provider, id: m.id });
+        }
+      }
+    }
+    return out;
+  }, [modelsMap]);
+
   const openNewSession = useCallback((machineId?: string) => {
     setNewSessionTarget(machineId ?? undefined);
     setNewSessionOpen(true);
@@ -1301,6 +1321,7 @@ export default function App() {
       selectedMachineId={selectedMachineId}
       onMachineSelect={setSelectedMachineId}
       compact={isMobile}
+      onConfigureRoster={() => navigate("/settings")}
     />
   );
 
@@ -1445,9 +1466,10 @@ export default function App() {
       {isMobile && selectedSession && (
         <div className="px-4 py-1.5 border-b border-[var(--border-primary)] text-xs text-[var(--text-tertiary)]">
           <div className="flex items-center gap-2 flex-wrap">
-            {(selectedState.model || selectedSession.model) && (
-              <span>{selectedState.model || selectedSession.model}</span>
-            )}
+            {(() => {
+              const m = displayModel(selectedState.model || selectedSession.model);
+              return m ? <span>{m}</span> : null;
+            })()}
             {(selectedState.thinkingLevel || selectedSession.thinkingLevel) && (
               <span>💭 {selectedState.thinkingLevel || selectedSession.thinkingLevel}</span>
             )}
@@ -1813,6 +1835,7 @@ export default function App() {
       defaultMachineId={defaultNewSessionTarget}
       recentCwds={recentCwdsForMachine}
       pinnedDirectories={pinnedDirectories}
+      models={availableModels}
       onStart={(args) => {
         handleStartNewSession(args);
         setNewSessionOpen(false);
@@ -2053,6 +2076,7 @@ export default function App() {
         machines={rosterMachines}
         selectedMachineId={selectedMachineId}
         onMachineSelect={setSelectedMachineId}
+        onConfigureRoster={() => navigate("/settings")}
       />
       <div className="hidden md:flex">
         <ResizableSidebar
@@ -2161,17 +2185,7 @@ export default function App() {
             )
           )
         )}
-        {settingsMatch && <SettingsPanel availableModels={(() => {
-          const seen = new Set<string>();
-          const models: Array<{ provider: string; id: string }> = [];
-          for (const list of modelsMap.values()) {
-            for (const m of list) {
-              const key = `${m.provider}/${m.id}`;
-              if (!seen.has(key)) { seen.add(key); models.push(m); }
-            }
-          }
-          return models;
-        })()} onMessage={onMessage} />}
+        {settingsMatch && <SettingsPanel availableModels={availableModels} onMessage={onMessage} />}
         {tunnelSetupMatch && <ZrokInstallGuide onBack={() => navigate("/")} />}
       </div>
       </div>

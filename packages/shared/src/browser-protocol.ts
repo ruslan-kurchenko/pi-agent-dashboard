@@ -1068,6 +1068,15 @@ export interface SpawnSessionBrowserMessage {
    * See change: walle-multi-machine.
    */
   prompt?: string;
+  /**
+   * walle-multi-machine: optional per-session model + thinking level chosen in
+   * the New Session popover. Daemon → forwarded into the `/inject` body; laptop/
+   * remote → forwarded into the `spawn_on_machine` frame, then `omp --model`/
+   * `--thinking`. Omitted → the machine/agent default. Old servers ignore
+   * unknown fields (degraded: default model). See change: dashboard-session-model-select.
+   */
+  model?: string;
+  thinkingLevel?: string;
 }
 
 export interface AttachProposalBrowserMessage {

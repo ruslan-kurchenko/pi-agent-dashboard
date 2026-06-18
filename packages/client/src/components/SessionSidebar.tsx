@@ -6,6 +6,7 @@ import type { DashboardSession } from "@blackbelt-technology/pi-dashboard-shared
 import { getSessionDisplayName } from "../lib/session-display-name.js";
 import { InlineRenameInput } from "./InlineRenameInput.js";
 import { PiLogo } from "./PiLogo.js";
+import { displayModel } from "../lib/format.js";
 
 interface Props {
   sessions: DashboardSession[];
@@ -102,7 +103,10 @@ export function SessionSidebar({ sessions, selectedId, onSelect, onRename, error
                 </span>
               </div>
               <div className="ml-4 mt-0.5 flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-                {session.model && <span className="truncate">{session.model}</span>}
+                {(() => {
+                  const m = displayModel(session.model);
+                  return m ? <span className="truncate">{m}</span> : null;
+                })()}
               </div>
               <div className="ml-4 mt-0.5 flex items-center gap-3 text-xs text-[var(--text-muted)]">
                 <span title="Tokens in">↓{formatTokens(session.tokensIn)}</span>

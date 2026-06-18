@@ -30,12 +30,25 @@ export interface DaemonInjectResult {
 }
 
 /**
- * POST `{ text, threadId? }` to the local daemon inject endpoint. Never
- * throws — connection/HTTP failures resolve to `{ ok: false, error }`.
+ * Optional per-session overrides forwarded into the daemon inject body.
+ * Chosen in the New Session popover; the daemon router carries them into the
+ * spawn so omp launches on the requested model / thinking level. Omitted →
+ * the home-agent default. See change: dashboard-session-model-select.
+ */
+export interface DaemonInjectOptions {
+  model?: string;
+  thinkingLevel?: string;
+}
+
+/**
+ * POST `{ text, threadId?, model?, thinkingLevel? }` to the local daemon inject
+ * endpoint. Never throws — connection/HTTP failures resolve to
+ * `{ ok: false, error }`. `model`/`thinkingLevel` are only included when set.
  */
 export async function injectToDaemon(
   text: string,
   threadId?: string,
+  opts?: DaemonInjectOptions,
 ): Promise<DaemonInjectResult> {
   const port = process.env.WALLE_DASHBOARD_INBOUND_PORT || "9300";
   const secret = process.env.WALLE_DASHBOARD_BRIDGE_SECRET;
@@ -48,6 +61,10 @@ export async function injectToDaemon(
       body: JSON.stringify({
         text,
         ...(typeof threadId === "string" && threadId ? { threadId } : {}),
+        ...(typeof opts?.model === "string" && opts.model ? { model: opts.model } : {}),
+        ...(typeof opts?.thinkingLevel === "string" && opts.thinkingLevel
+          ? { thinkingLevel: opts.thinkingLevel }
+          : {}),
       }),
     });
     if (!r.ok) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatTokens, formatRelativeTime, formatMessageTime } from "../format.js";
+import { formatTokens, formatRelativeTime, formatMessageTime, displayModel } from "../format.js";
 
 describe("formatTokens", () => {
   it("should return '0' for zero", () => {
@@ -105,5 +105,37 @@ describe("formatMessageTime", () => {
     const now = makeNow(2026, 3, 25, 15, 0, 0);
     const ts = makeNow(2026, 3, 25, 1, 2, 3);
     expect(formatMessageTime(ts, now)).toBe("01:02:03");
+  });
+});
+
+describe("displayModel", () => {
+  it("returns the trimmed model for a real provider/id label", () => {
+    expect(displayModel("anthropic/claude-opus-4-8")).toBe("anthropic/claude-opus-4-8");
+    expect(displayModel("  openai-codex/gpt-5.5  ")).toBe("openai-codex/gpt-5.5");
+  });
+
+  it("returns null for missing values", () => {
+    expect(displayModel(undefined)).toBeNull();
+    expect(displayModel(null)).toBeNull();
+    expect(displayModel("")).toBeNull();
+    expect(displayModel("   ")).toBeNull();
+  });
+
+  it("returns null for the literal 'undefined'/'null' sentinels (any case)", () => {
+    expect(displayModel("undefined")).toBeNull();
+    expect(displayModel("UNDEFINED")).toBeNull();
+    expect(displayModel("null")).toBeNull();
+    expect(displayModel("undefined/undefined")).toBeNull();
+  });
+
+  it("returns null when any provider/id segment is empty or a sentinel", () => {
+    expect(displayModel("anthropic/")).toBeNull();
+    expect(displayModel("/claude")).toBeNull();
+    expect(displayModel("undefined/claude")).toBeNull();
+    expect(displayModel("anthropic/undefined")).toBeNull();
+  });
+
+  it("passes through a single-segment model name", () => {
+    expect(displayModel("claude")).toBe("claude");
   });
 });

@@ -236,6 +236,58 @@ describe("handleSpawnSession — machineId routing", () => {
     });
   });
 
+  it("forwards model + thinkingLevel into the spawn_on_machine frame when set", async () => {
+    process.env.WALLE_MACHINE_ID = "daemon-laptop";
+    const { ws: bridgeWs, sent: bridgeSent } = makeBridge();
+    const { ctx } = makeCtx({ bridgeForId: { "remote-mac": bridgeWs } });
+
+    await handleSpawnSession(
+      {
+        type: "spawn_session",
+        cwd: "/work/remote",
+        requestId: "req-remote-model",
+        machineId: "remote-mac",
+        model: "anthropic/claude-opus-4-8",
+        thinkingLevel: "high",
+      } as never,
+      ctx,
+    );
+
+    expect(bridgeSent).toHaveLength(1);
+    expect(bridgeSent[0]).toEqual({
+      type: "spawn_on_machine",
+      requestId: "req-remote-model",
+      cwd: "/work/remote",
+      model: "anthropic/claude-opus-4-8",
+      thinkingLevel: "high",
+    });
+  });
+
+  it("omits model + thinkingLevel from the frame when empty or unset", async () => {
+    process.env.WALLE_MACHINE_ID = "daemon-laptop";
+    const { ws: bridgeWs, sent: bridgeSent } = makeBridge();
+    const { ctx } = makeCtx({ bridgeForId: { "remote-mac": bridgeWs } });
+
+    await handleSpawnSession(
+      {
+        type: "spawn_session",
+        cwd: "/work/remote",
+        requestId: "req-remote-nomodel",
+        machineId: "remote-mac",
+        model: "",
+        thinkingLevel: "",
+      } as never,
+      ctx,
+    );
+
+    expect(bridgeSent).toHaveLength(1);
+    expect(bridgeSent[0]).toEqual({
+      type: "spawn_on_machine",
+      requestId: "req-remote-nomodel",
+      cwd: "/work/remote",
+    });
+  });
+
   it("synthesizes a requestId when the client did not provide one", async () => {
     process.env.WALLE_MACHINE_ID = "daemon-laptop";
     const { ws: bridgeWs, sent: bridgeSent } = makeBridge();

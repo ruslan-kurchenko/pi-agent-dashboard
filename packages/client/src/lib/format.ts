@@ -71,3 +71,26 @@ export function formatRelativeTime(ms: number): string {
   const days = Math.floor(hours / 24);
   return `${days}d`;
 }
+
+/**
+ * Sanitize a session model string for display. Returns the trimmed model when
+ * it is a real value, else `null`. Live daemon sessions that have not yet
+ * surfaced a model — and a `model_select` event whose provider/id are absent
+ * (`event-reducer` builds `${provider}/${id}`) — can leak the literal strings
+ * "undefined" or "undefined/undefined". Callers render nothing (or "—") on
+ * `null` rather than showing that text. See dashboard fix #5 (daemon model
+ * "undefined").
+ */
+export function displayModel(model?: string | null): string | null {
+  if (!model) return null;
+  const trimmed = model.trim();
+  if (!trimmed) return null;
+  // Reject whole-string sentinels and any "/"-segment that is a sentinel, so
+  // "undefined", "null", "undefined/undefined", and "provider/" all drop out
+  // while real "provider/id" labels pass through.
+  for (const part of trimmed.split("/")) {
+    const p = part.trim().toLowerCase();
+    if (p === "" || p === "undefined" || p === "null") return null;
+  }
+  return trimmed;
+}

@@ -903,6 +903,14 @@ export interface SpawnOnMachineExtensionMessage {
    * See change: walle-multi-machine.
    */
   prompt?: string;
+  /**
+   * walle-multi-machine: optional per-session model + thinking level, mirrored
+   * from `SpawnSessionBrowserMessage`. The bridge forwards them to the local
+   * agent as `omp --model <model> --thinking <thinkingLevel>`. Omitted → agent
+   * default. See change: dashboard-session-model-select.
+   */
+  model?: string;
+  thinkingLevel?: string;
 }
 
 /**

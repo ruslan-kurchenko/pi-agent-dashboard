@@ -5,6 +5,7 @@ import type { DashboardSession, OpenSpecChange, CommandInfo, ImageContent } from
 import type { SessionState } from "../lib/event-reducer.js";
 import type { DetectedEditor } from "../lib/editor-api.js";
 import { getSessionDisplayName } from "../lib/session-display-name.js";
+import { displayModel } from "../lib/format.js";
 import { InlineRenameInput } from "./InlineRenameInput.js";
 import { MobileActionMenu } from "./MobileActionMenu.js";
 import { useMobile } from "../hooks/useMobile.js";
@@ -411,7 +412,10 @@ export function SessionHeader({ session, state, onRename, showBack, onBack, mobi
         </span>
       )}
       <MachineChip machine={session.machine} variant="header" />
-      {(state.model || session.model) && <span className="text-[10px] px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">{state.model || session.model}</span>}
+      {(() => {
+        const m = displayModel(state.model || session.model);
+        return m ? <span className="text-[10px] px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">{m}</span> : null;
+      })()}
       {(state.thinkingLevel || session.thinkingLevel) && (
         <span className="text-[10px] px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] inline-flex items-center gap-0.5"><Icon path={mdiHeadLightbulb} size={0.45} /> {state.thinkingLevel || session.thinkingLevel}</span>
       )}

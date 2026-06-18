@@ -25,13 +25,19 @@ async function injectDaemonMessage(
   threadId: string | undefined,
   notify?: (text: string, kind?: "info" | "error") => void,
   successMsg?: string,
+  opts?: { model?: string; thinkingLevel?: string },
 ): Promise<void> {
   try {
     const res = await fetch(`${apiBase}/api/machines/${encodeURIComponent(machineId)}/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify(threadId ? { text, threadId } : { text }),
+      body: JSON.stringify({
+        text,
+        ...(threadId ? { threadId } : {}),
+        ...(opts?.model ? { model: opts.model } : {}),
+        ...(opts?.thinkingLevel ? { thinkingLevel: opts.thinkingLevel } : {}),
+      }),
     });
     const body = (await res.json().catch(() => null)) as { success?: boolean; error?: string } | null;
     if (!res.ok || !body?.success) {
@@ -314,7 +320,7 @@ export function useSessionActions(deps: SessionActionDeps) {
   const handleSpawnSession = useCallback((
     cwd: string,
     attachProposal?: string,
-    opts?: { gitWorktreeBase?: string; placeholderCwd?: string; machineId?: string; prompt?: string },
+    opts?: { gitWorktreeBase?: string; placeholderCwd?: string; machineId?: string; prompt?: string; model?: string; thinkingLevel?: string },
   ) => {
     // The placeholder/disabled-button group cwd. For a normal spawn this is
     // the spawn cwd; for a worktree spawn the host passes the PARENT repo
@@ -363,6 +369,11 @@ export function useSessionActions(deps: SessionActionDeps) {
       // walle-multi-machine: optional first prompt for a laptop/remote New
       // Session, passed through to `omp` positional MESSAGES by the bridge.
       ...(opts?.prompt ? { prompt: opts.prompt } : {}),
+      // walle-dash-fixes #6: optional per-session model + reasoning-effort
+      // overrides from the New Session popover. Server forwards them into the
+      // `spawn_on_machine` frame; the bridge maps them to `--model`/`--thinking`.
+      ...(opts?.model ? { model: opts.model } : {}),
+      ...(opts?.thinkingLevel ? { thinkingLevel: opts.thinkingLevel } : {}),
     });
   }, [send, clearSpawningCwd, setSpawningCwds, spawnTimeoutsRef, pendingSpawnsRef]);
 
@@ -377,8 +388,8 @@ export function useSessionActions(deps: SessionActionDeps) {
    * The New Session flow is NOT gated by spawnDisabled (it is the sanctioned
    * spawn path). See wiring-contract (Routing rules → New Session).
    */
-  const handleStartNewSession = useCallback((args: { machineId: string; cwd?: string; prompt?: string }) => {
-    const { machineId, cwd, prompt } = args;
+  const handleStartNewSession = useCallback((args: { machineId: string; cwd?: string; prompt?: string; model?: string; thinkingLevel?: string }) => {
+    const { machineId, cwd, prompt, model, thinkingLevel } = args;
     const entry = machines.find((m) => m.id === machineId);
     const isDaemon = entry?.role === "daemon" || entry?.messageable === true;
     const label = entry?.label ?? machineId;
@@ -388,10 +399,10 @@ export function useSessionActions(deps: SessionActionDeps) {
         notify?.(`A first message is required to start a WALL•E session on ${label}.`, "error");
         return;
       }
-      void injectDaemonMessage(apiBase, machineId, text, undefined, notify, `Starting on ${label}…`);
+      void injectDaemonMessage(apiBase, machineId, text, undefined, notify, `Starting on ${label}…`, { model, thinkingLevel });
       return;
     }
-    handleSpawnSession(cwd ?? "", undefined, { machineId, prompt });
+    handleSpawnSession(cwd ?? "", undefined, { machineId, prompt, model, thinkingLevel });
   }, [machines, apiBase, notify, handleSpawnSession]);
 
   const handleHideSession = useCallback((sessionId: string) => {

@@ -19,7 +19,7 @@ export const sourceBadgeColors = sourceBadgeColorsExt;
 import type { DashboardSession, ImageContent } from "@blackbelt-technology/pi-dashboard-shared/types.js";
 import { getSessionDisplayName } from "../lib/session-display-name.js";
 import { isDaemonSession } from "../lib/daemon-session.js";
-import { formatRelativeTime, formatTokens } from "../lib/format.js";
+import { formatRelativeTime, formatTokens, displayModel } from "../lib/format.js";
 import { selectBadgeTimestamp } from "../lib/session-card-time.js";
 import type { DetectedEditor } from "../lib/editor-api.js";
 import { MachineChip } from "./MachineChip.js";
@@ -556,11 +556,12 @@ export function SessionCard({
 
         {/* Line 2: model + activity (left) | context bar + cost (right) */}
         <div className="flex items-center mt-1 gap-2 text-[12px]">
-          {session.model && (
-            <span className="text-[var(--text-tertiary)] truncate">
-              {session.model}
-            </span>
-          )}
+          {(() => {
+            const m = displayModel(session.model);
+            return m ? (
+              <span className="text-[var(--text-tertiary)] truncate">{m}</span>
+            ) : null;
+          })()}
           <ActivityIndicator session={session} />
           {/* Pi-native queue count badge — sum of steering + follow-up depth.
               Hidden when both queues empty. See change: add-followup-edit-and-steer-cancel. */}
@@ -793,11 +794,14 @@ export function SessionCard({
 
       {/* Line 2: model + thinking level + source/fork right-aligned */}
       <div className="flex items-center mt-0.5 gap-1.5">
-        {session.model && (
-          <span className="text-xs text-[var(--text-tertiary)] truncate">
-            {session.model}{session.thinkingLevel ? ` (${session.thinkingLevel})` : ""}
-          </span>
-        )}
+        {(() => {
+          const m = displayModel(session.model);
+          return m ? (
+            <span className="text-xs text-[var(--text-tertiary)] truncate">
+              {m}{session.thinkingLevel ? ` (${session.thinkingLevel})` : ""}
+            </span>
+          ) : null;
+        })()}
         <span className="flex-1" />
         {/* Daemon (WALL•E) Continue: opens the session — the composer injects to
             the wall-e thread. No host-pi resume, no Fork. Archived daemon

@@ -522,6 +522,52 @@ describe("POST /api/machines/:id/message", () => {
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ text: "do the thing" });
   });
 
+  it("forwards model + thinkingLevel into the inject body when present", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, threadId: "t-100" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    ({ app } = await makeApp());
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/machines/walle-daemon/message",
+      payload: {
+        text: "do the thing",
+        model: "anthropic/claude-opus-4-8",
+        thinkingLevel: "high",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      text: "do the thing",
+      model: "anthropic/claude-opus-4-8",
+      thinkingLevel: "high",
+    });
+  });
+
+  it("omits model + thinkingLevel from the inject body when absent or empty", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, threadId: "t-101" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    ({ app } = await makeApp());
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/machines/walle-daemon/message",
+      payload: { text: "no overrides", model: "", thinkingLevel: "" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ text: "no overrides" });
+  });
+
   it("returns 501 for a non-local machine id (remote machines are not messageable)", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     ({ app } = await makeApp());

@@ -48,8 +48,11 @@ export interface NewSessionPopoverProps {
   recentCwds: (machineId: string) => string[];
   /** Operator-pinned directories, shown above the free-text input. */
   pinnedDirectories?: string[];
+  /** Optional model registry (deduped `{provider,id}` labels). Empty/omitted
+   *  falls back to a curated list. Feeds the step-3 model picker. See fix #6. */
+  models?: Array<{ provider: string; id: string }>;
   /** Submit. Host turns this into the device-aware spawn/message route. */
-  onStart: (args: { machineId: string; cwd?: string; prompt?: string }) => void;
+  onStart: (args: { machineId: string; cwd?: string; prompt?: string; model?: string; thinkingLevel?: string }) => void;
   /** Esc from step 1, backdrop click, or successful submit. */
   onClose: () => void;
 }
@@ -70,6 +73,20 @@ const STATUS_LABEL: Record<MachineStatus, string> = {
   offline: "offline",
   unreachable: "unreachable",
 };
+
+/**
+ * Curated fallback model list — used only when the client model registry is
+ * empty (no session has reported a model list yet). See fix #6.
+ */
+const FALLBACK_MODELS = [
+  "anthropic/claude-opus-4-8",
+  "anthropic/claude-sonnet-4-5",
+  "anthropic/claude-haiku-4-5",
+  "openai-codex/gpt-5.5",
+];
+
+/** Optional reasoning-effort levels (empty value = machine/agent default). */
+const THINKING_LEVELS = ["minimal", "low", "medium", "high", "xhigh"];
 
 /**
  * Daemon = the dashboard's own wall-e host (message route → /inject). Anything
@@ -95,6 +112,7 @@ export function NewSessionPopover({
   defaultMachineId,
   recentCwds,
   pinnedDirectories,
+  models,
   onStart,
   onClose,
 }: NewSessionPopoverProps) {
@@ -104,6 +122,8 @@ export function NewSessionPopover({
   const [machineIdx, setMachineIdx] = useState(0);
   const [cwd, setCwd] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [model, setModel] = useState("");
+  const [thinkingLevel, setThinkingLevel] = useState("");
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const cwdInputRef = useRef<HTMLInputElement | null>(null);
@@ -140,6 +160,8 @@ export function NewSessionPopover({
       const recent = m ? recentCwds(m.id) : [];
       setCwd(recent[0] ?? "");
       setPrompt("");
+      setModel("");
+      setThinkingLevel("");
     }
     wasOpenRef.current = open;
   }, [open, defaultIdx, machines, recentCwds]);
@@ -224,6 +246,26 @@ export function NewSessionPopover({
     return filtered.slice(0, 8);
   }, [selectedMachine, cwd, recentCwds, pinnedDirectories]);
 
+  // Model options for the optional step-3 picker: the live client registry
+  // (deduped provider/id labels surfaced by sessions that already loaded a
+  // model list) when present, else a curated fallback so a fresh dashboard
+  // still offers a sensible choice. Empty value = machine/agent default. #6.
+  const modelOptions = useMemo(() => {
+    if (models && models.length > 0) {
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const m of models) {
+        const labelStr = `${m.provider}/${m.id}`;
+        if (!seen.has(labelStr)) {
+          seen.add(labelStr);
+          out.push(labelStr);
+        }
+      }
+      return out;
+    }
+    return FALLBACK_MODELS;
+  }, [models]);
+
   // Daemon needs a first prompt; laptop/remote needs a cwd. Either way a
   // selectable target is required.
   const cwdValue = cwd.trim();
@@ -245,9 +287,11 @@ export function NewSessionPopover({
       machineId: selectedMachine.id,
       cwd: c || undefined,
       prompt: p || undefined,
+      model: model || undefined,
+      thinkingLevel: thinkingLevel || undefined,
     });
     onClose();
-  }, [selectedMachine, cwd, prompt, onStart, onClose]);
+  }, [selectedMachine, cwd, prompt, model, thinkingLevel, onStart, onClose]);
 
   // Advance from the machine step to cwd, pre-filling cwd from the picked
   // machine's most-recent dir.
@@ -394,6 +438,11 @@ export function NewSessionPopover({
               promptRef={promptRef}
               value={prompt}
               onChange={setPrompt}
+              model={model}
+              onModelChange={setModel}
+              modelOptions={modelOptions}
+              thinkingLevel={thinkingLevel}
+              onThinkingChange={setThinkingLevel}
               canStart={canStart}
               onStart={submit}
             />
@@ -626,6 +675,11 @@ function PromptStep({
   promptRef,
   value,
   onChange,
+  model,
+  onModelChange,
+  modelOptions,
+  thinkingLevel,
+  onThinkingChange,
   canStart,
   onStart,
 }: {
@@ -637,6 +691,11 @@ function PromptStep({
   promptRef: React.MutableRefObject<HTMLTextAreaElement | null>;
   value: string;
   onChange: (v: string) => void;
+  model: string;
+  onModelChange: (v: string) => void;
+  modelOptions: string[];
+  thinkingLevel: string;
+  onThinkingChange: (v: string) => void;
   canStart: boolean;
   onStart: () => void;
 }) {
@@ -644,6 +703,10 @@ function PromptStep({
   const startLabel = daemon ? "Start session" : `Spawn on ${label}`;
   const cwdText = cwd || (daemon ? "/workspace/agent" : "~");
   const sub = daemon ? `Runs on the daemon · ${cwdText}` : `${host ?? label} · ${cwdText}`;
+  const selectClass =
+    "w-full rounded-[6px] border border-[var(--border-secondary,rgba(255,255,255,0.075))] bg-[var(--bg-tertiary,#1c1c21)] px-2 py-1.5 text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue,#5fb4a4)]";
+  const fieldCap =
+    "block text-[10px] uppercase tracking-[0.08em] text-[var(--text-tertiary)] mb-1";
   return (
     <div className="flex flex-col gap-3 px-4 py-4">
       <div className="text-[13px] font-medium text-[var(--text-primary)]" data-testid="new-session-confirm-title">
@@ -669,6 +732,40 @@ function PromptStep({
         data-testid="new-session-prompt-input"
         className="resize-none rounded-[6px] border border-[var(--border-secondary,rgba(255,255,255,0.075))] bg-[var(--bg-tertiary,#1c1c21)] px-3 py-2 text-[13px] leading-[1.5] text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue,#5fb4a4)] placeholder:text-[var(--text-muted)]"
       />
+      {/* Optional model + reasoning-effort overrides. Empty value (Default)
+          leaves the machine/agent default untouched. See fix #6. */}
+      <div className="flex items-start gap-2">
+        <label className="min-w-0 flex-1">
+          <span className={fieldCap}>Model</span>
+          <select
+            value={model}
+            onChange={(e) => onModelChange(e.target.value)}
+            aria-label="Model"
+            data-testid="new-session-model"
+            className={`${selectClass} font-mono truncate`}
+          >
+            <option value="">Default</option>
+            {modelOptions.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </label>
+        <label className="w-[116px] shrink-0">
+          <span className={fieldCap}>Thinking</span>
+          <select
+            value={thinkingLevel}
+            onChange={(e) => onThinkingChange(e.target.value)}
+            aria-label="Thinking level"
+            data-testid="new-session-thinking"
+            className={`${selectClass} font-mono`}
+          >
+            <option value="">Default</option>
+            {THINKING_LEVELS.map((l) => (
+              <option key={l} value={l}>{l}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1 text-[11px] text-[var(--text-tertiary)]" data-testid="new-session-confirm-sub">
           Start on{" "}
