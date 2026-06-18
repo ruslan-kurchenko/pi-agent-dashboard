@@ -31,6 +31,7 @@ import type {
 } from "@blackbelt-technology/pi-dashboard-shared/rest-api.js";
 import { loadConfig } from "@blackbelt-technology/pi-dashboard-shared/config.js";
 import { writeConfigPartial } from "../config-api.js";
+import { injectToDaemon } from "../daemon-inject.js";
 
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 const IDLE_WINDOW_MS = 30 * 60 * 1000;
@@ -299,29 +300,13 @@ export function registerMachinesRoutes(
         reply.code(400);
         return { success: false, error: "text required" };
       }
-      const port = process.env.WALLE_DASHBOARD_INBOUND_PORT || "9300";
-      const secret = process.env.WALLE_DASHBOARD_BRIDGE_SECRET;
-      const headers: Record<string, string> = { "content-type": "application/json" };
-      if (secret) headers.authorization = `Bearer ${secret}`;
-      try {
-        const r = await fetch(`http://127.0.0.1:${port}/inject`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            text,
-            ...(typeof body?.threadId === "string" && body.threadId ? { threadId: body.threadId } : {}),
-          }),
-        });
-        if (!r.ok) {
-          reply.code(502);
-          return { success: false, error: `daemon inject failed (${r.status})` };
-        }
-        const data = (await r.json()) as { threadId?: string };
-        return { success: true, data: { threadId: data.threadId ?? "" } };
-      } catch (err) {
+      const threadId = typeof body?.threadId === "string" && body.threadId ? body.threadId : undefined;
+      const result = await injectToDaemon(text, threadId);
+      if (!result.ok) {
         reply.code(502);
-        return { success: false, error: `daemon unreachable: ${err instanceof Error ? err.message : String(err)}` };
+        return { success: false, error: result.error ?? "daemon inject failed" };
       }
+      return { success: true, data: { threadId: result.threadId ?? "" } };
     },
   );
 }

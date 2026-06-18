@@ -19,7 +19,7 @@ import type { DashboardSession } from "@blackbelt-technology/pi-dashboard-shared
 
 export interface MachineChipProps {
   machine: NonNullable<DashboardSession["machine"]> | undefined | null;
-  variant?: "card" | "folder" | "header";
+  variant?: "card" | "folder" | "header" | "target";
   className?: string;
 }
 
@@ -27,12 +27,12 @@ export function MachineChip({ machine, variant = "card", className = "" }: Machi
   if (!machine || !machine.id) return null;
 
   const label = machine.label ?? machine.id;
-  const accent = machine.accent ?? "var(--text-tertiary)";
+  const accent = machine.accent ?? "var(--m-never, #4a4a52)";
 
   // Variant geometry. Kept inline (single source of truth) so a card and
   // header chip render at consistent visual weight relative to each other.
   const sizing =
-    variant === "header"
+    variant === "header" || variant === "target"
       ? "text-[11px] px-2 py-0.5 gap-1.5"
       : variant === "folder"
         ? "text-[10px] px-1 py-0 gap-1"
@@ -40,7 +40,7 @@ export function MachineChip({ machine, variant = "card", className = "" }: Machi
 
   return (
     <span
-      className={`inline-flex items-center rounded border border-[var(--border-secondary)] bg-[var(--bg-tertiary)]/50 text-[var(--text-secondary)] font-medium flex-shrink-0 ${sizing} ${className}`}
+      className={`inline-flex items-center rounded-[var(--r-chip,6px)] border border-[var(--border-secondary)] bg-[var(--bg-tertiary)]/50 text-[var(--text-secondary)] font-medium flex-shrink-0 ${sizing} ${className}`}
       title={`Machine: ${machine.id}${machine.label ? ` (${machine.label})` : ""}`}
       data-testid="machine-chip"
       data-machine-id={machine.id}
@@ -50,8 +50,8 @@ export function MachineChip({ machine, variant = "card", className = "" }: Machi
         className="inline-block rounded-[2px] flex-shrink-0"
         style={{
           backgroundColor: accent,
-          width: variant === "header" ? "8px" : "6px",
-          height: variant === "header" ? "8px" : "6px",
+          width: variant === "header" || variant === "target" ? "8px" : "6px",
+          height: variant === "header" || variant === "target" ? "8px" : "6px",
         }}
       />
       <span className="truncate max-w-[120px]">{label}</span>

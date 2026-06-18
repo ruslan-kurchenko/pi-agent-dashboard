@@ -107,6 +107,17 @@ export interface SessionMeta {
     accent?: string;
   };
 
+  /**
+   * walle-multi-machine: persisted wall-e thread id for a dashboard-initiated
+   * daemon session. Mirrors `DashboardSession.daemonThreadId`. Written to the
+   * `.meta.json` sidecar so daemon "Continue" survives container exit /
+   * archive / server restart and can be restored cold by `session-scanner.ts`
+   * without a live bridge. Persisted/read/merged exactly like `machine`.
+   * Absent on single-machine / upstream installs.
+   * See change: walle-multi-machine.
+   */
+  daemonThreadId?: string;
+
   // Cache freshness — compared against .jsonl mtime
   cachedAt?: number;
 }

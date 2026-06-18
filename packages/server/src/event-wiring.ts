@@ -254,6 +254,23 @@ export function wireEvents(deps: EventWiringDeps): void {
       return;
     }
 
+    // walle-multi-machine: cross-machine RESUME failures arrive from the
+    // bridge as `resume_on_machine_failed`. Translate to a browser-facing
+    // `resume_result` error keyed on `requestId`, mirroring the
+    // `spawn_on_machine_failed → spawn_error` forwarder above. Broadcast to
+    // all browsers — the originating one filters by `requestId` / `sessionId`.
+    // See change: walle-multi-machine.
+    if (msg.type === "resume_on_machine_failed") {
+      browserGateway.broadcastToAll({
+        type: "resume_result",
+        sessionId: msg.sessionId,
+        success: false,
+        message: msg.detail ?? msg.code,
+        requestId: msg.requestId,
+      });
+      return;
+    }
+
     if (msg.type === "event_forward") {
       // Raw-event fan-out to plugin onEvent subscribers (live + replay).
       // Fired before the core handling so plugins see every forwarded event.

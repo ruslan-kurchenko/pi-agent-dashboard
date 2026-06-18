@@ -34,10 +34,10 @@ function abbrev(label: string, role?: string): string {
 
 function dotColor(status?: MachineStatus): string {
   switch (status) {
-    case "online": return "#4ade80";
-    case "idle": return "#a0a0a8";
-    case "unreachable": return "#e8944a";
-    default: return "#44444c";
+    case "online": return "var(--s-running, #5ed09a)";
+    case "idle": return "var(--s-idle, #b9b9c0)";
+    case "unreachable": return "var(--s-unreach, #e6a55a)";
+    default: return "var(--s-offline, #6a6a72)";
   }
 }
 
@@ -106,7 +106,7 @@ export function CollapsibleRosterColumn({
                   background: dotColor(m.status),
                   border: "2px solid var(--bg-secondary)",
                   ...(m.status === "online"
-                    ? { boxShadow: `0 0 4px ${dotColor("online")}60` }
+                    ? { boxShadow: "0 0 4px rgba(94,208,154,0.4)" }
                     : {}),
                 }}
               />

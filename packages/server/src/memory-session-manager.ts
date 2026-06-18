@@ -47,6 +47,16 @@ export interface RegisterSessionParams {
    * See change: walle-multi-machine.
    */
   machine?: { id: string; label?: string; accent?: string };
+  /**
+   * walle-multi-machine: wall-e thread id for a dashboard-initiated daemon
+   * session, forwarded from `SessionRegisterMessage.daemonThreadId` (env
+   * `PI_DASHBOARD_THREAD_ID`). Propagated to `DashboardSession.daemonThreadId`
+   * and persisted to `.meta.json` so daemon "Continue" survives container
+   * exit. Optional/back-compat — absent for laptop/remote and non-dashboard
+   * daemon sessions. Restored on register like `machine`.
+   * See change: walle-multi-machine.
+   */
+  daemonThreadId?: string;
 }
 
 export interface OnChangeContext {
@@ -162,6 +172,10 @@ export function createMemorySessionManager(
         // walle-multi-machine: fall back to THIS server's machine so a
         // machine-less local register attributes to the host, not nowhere.
         machine: params.machine ?? existing?.machine ?? localMachine?.(),
+        // walle-multi-machine: carry the daemon thread id forward on reattach
+        // (bridge omits it on re-register) and accept the bridge-supplied
+        // value on first register. See change: walle-multi-machine.
+        daemonThreadId: params.daemonThreadId ?? existing?.daemonThreadId,
       };
       sessions.set(params.id, session);
       mgr.onChange?.(params.id, {

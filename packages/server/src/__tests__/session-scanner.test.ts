@@ -83,6 +83,26 @@ describe("session-scanner", () => {
     expect(result.cacheUpdates).toBe(0); // no re-extraction needed
   });
 
+  it("restores daemonThreadId from the .meta.json sidecar (cold-start, no bridge)", () => {
+    const dir = createSessionDir("--daemon-cwd--");
+    const sf = createJsonl(dir, "2026-03-30T21-39-43-034Z_daemon-1.jsonl", { id: "daemon-1", cwd: "/daemon/cwd" });
+    writeSessionMeta(sf, {
+      cwd: "/daemon/cwd",
+      source: "dashboard",
+      status: "ended",
+      startedAt: 1000,
+      machine: { id: "walle-daemon" },
+      daemonThreadId: "thread-cold-42",
+      cachedAt: Date.now() + 10000, // fresh cache
+    });
+
+    const result = scanAllSessions(tmpDir);
+    expect(result.sessions).toHaveLength(1);
+    expect(result.sessions[0].id).toBe("daemon-1");
+    expect(result.sessions[0].daemonThreadId).toBe("thread-cold-42");
+    expect(result.sessions[0].machine).toEqual({ id: "walle-daemon" });
+  });
+
   it("should fall back to .jsonl parsing when no .meta.json exists", () => {
     const dir = createSessionDir("--test-cwd--");
     createJsonl(dir, "2026-03-30T21-39-43-034Z_def-456.jsonl", { id: "def-456", cwd: "/fallback/cwd" });

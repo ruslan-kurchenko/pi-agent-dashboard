@@ -1199,3 +1199,60 @@ describe("SessionCard — +Worktree button (session-card-plus-session-button)", 
     expect(screen.getByTestId("session-card-spawn-worktree")).toBeTruthy();
   });
 });
+
+describe("SessionCard — daemon (WALL•E) Continue affordance (walle-daemon-continue-honesty)", () => {
+  const daemonProps = { ...defaultProps, onResume: vi.fn() };
+
+  it("daemon + daemonThreadId (ended) → Continue pill, no Resume/Fork", () => {
+    const session = makeSession({
+      status: "ended",
+      sessionFile: "/sessions/d.jsonl",
+      machine: { id: "walle-daemon" },
+      daemonThreadId: "thread-1",
+    });
+    render(<SessionCard session={session} {...daemonProps} />);
+    expect(screen.getByTestId("session-continue-btn")).toBeTruthy();
+    expect(screen.queryByTestId("session-resume-btn")).toBeNull();
+    expect(screen.queryByText("Fork")).toBeNull();
+  });
+
+  it("Continue click opens the session (onSelect) and never calls onResume", () => {
+    const onSelect = vi.fn();
+    const onResume = vi.fn();
+    const session = makeSession({
+      id: "d1",
+      status: "ended",
+      sessionFile: "/sessions/d.jsonl",
+      machine: { id: "walle-daemon" },
+      daemonThreadId: "thread-1",
+    });
+    render(<SessionCard session={session} {...defaultProps} onSelect={onSelect} onResume={onResume} />);
+    fireEvent.click(screen.getByTestId("session-continue-btn"));
+    expect(onSelect).toHaveBeenCalledWith("d1");
+    expect(onResume).not.toHaveBeenCalled();
+  });
+
+  it("archived daemon (no daemonThreadId) → no Continue/Resume/Fork pill", () => {
+    const session = makeSession({
+      status: "ended",
+      sessionFile: "/sessions/d.jsonl",
+      machine: { id: "walle-daemon" },
+    });
+    render(<SessionCard session={session} {...daemonProps} />);
+    expect(screen.queryByTestId("session-continue-btn")).toBeNull();
+    expect(screen.queryByTestId("session-resume-btn")).toBeNull();
+    expect(screen.queryByText("Fork")).toBeNull();
+  });
+
+  it("non-daemon ended session still renders Resume + Fork (regression)", () => {
+    const session = makeSession({
+      status: "ended",
+      sessionFile: "/sessions/r.jsonl",
+      machine: { id: "mac-laptop", label: "Mac" },
+    });
+    render(<SessionCard session={session} {...daemonProps} />);
+    expect(screen.getByTestId("session-resume-btn")).toBeTruthy();
+    expect(screen.getByText("Fork")).toBeTruthy();
+    expect(screen.queryByTestId("session-continue-btn")).toBeNull();
+  });
+});

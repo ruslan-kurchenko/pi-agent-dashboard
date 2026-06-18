@@ -226,6 +226,19 @@ export interface DashboardSession {
     label?: string;
     accent?: string;
   };
+  /**
+   * walle-multi-machine: the wall-e (home-agent) thread id backing a
+   * dashboard-initiated daemon session. Present ONLY for sessions started
+   * via the dashboard's New Session flow against a `role: "daemon"` machine
+   * (the server stamps it from the bridge's `session_register`, which reads
+   * env `PI_DASHBOARD_THREAD_ID`). Drives daemon "Continue": the live
+   * composer posts `{ text, threadId: daemonThreadId }` to
+   * `/api/machines/<id>/message` → `/inject`, resuming that thread's context.
+   * Absent for laptop/remote sessions, for autonomous (non-dashboard) daemon
+   * task sessions, and on single-machine / upstream installs.
+   * See change: walle-multi-machine.
+   */
+  daemonThreadId?: string;
 }
 
 // ── Extension UI System (Phase 1: management-modal slot) ───────────

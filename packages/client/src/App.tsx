@@ -34,7 +34,6 @@ import { WorktreeSpawnDialog } from "./components/WorktreeSpawnDialog.js";
 import { useOpenSpecReader } from "./hooks/useOpenSpecReader.js";
 import type { OpenSpecArtifact } from "@blackbelt-technology/pi-dashboard-shared/types.js";
 import { SessionHeader } from "./components/SessionHeader.js";
-import { ServerSelector } from "./components/ServerSelector.js";
 import { Toast, useToast } from "./components/Toast.js";
 import { ConnectionStatusBanner } from "./components/ConnectionStatusBanner.js";
 import { performServerSwitch } from "./lib/server-switch.js";
@@ -42,6 +41,10 @@ import { openStagingSocket } from "./lib/staging-socket.js";
 import { PiUpdateBadge } from "./components/PiUpdateBadge.js";
 import { useLaunchSource } from "./hooks/useLaunchSource.js";
 import { TokenStatsBar } from "./components/TokenStatsBar.js";
+import { TopBar } from "./components/TopBar.js";
+import { ViewingFromBar } from "./components/ViewingFromBar.js";
+import { MobileActionBar, ResumeRecentSheet } from "./components/MobileActionBar.js";
+import { NewSessionPopover } from "./components/NewSessionPopover.js";
 
 import { CommandInput } from "./components/CommandInput.js";
 import { QueuePanel } from "./components/QueuePanel.js";
@@ -317,6 +320,12 @@ export default function App() {
   // co-mounts with the rest of the dashboard chrome and survives
   // route changes.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // SOTA New Session popover (device-aware). ClientShell owns open/target;
+  // the popover (ClientSessions) builds the target→cwd→prompt UI.
+  const [newSessionOpen, setNewSessionOpen] = useState(false);
+  const [newSessionTarget, setNewSessionTarget] = useState<string | undefined>(undefined);
+  // Mobile "Continue" sheet — recent ended sessions → Resume.
+  const [continueSheetOpen, setContinueSheetOpen] = useState(false);
   // Drives the slot-registry enable filter from /api/health.plugins[] +
   // plugin_config_update broadcasts. The returned `startedAt` is also
   // consumed inside the Plugins tab via this same hook re-call, so we don't
@@ -954,7 +963,7 @@ export default function App() {
     selectedId, send, navigate, setMobileOpen,
     sessions, setSessions, setSessionStates, setSpawningCwds, setTerminals,
     clearSpawningCwd, spawnTimeoutsRef, pendingTerminalCwdRef, terminals,
-    pendingSpawnsRef,
+    pendingSpawnsRef, apiBase, machines: rosterMachines, notify: showToast,
   });
   const {
     // Queue-mutation action senders removed entirely (pi exposes no mutation
@@ -963,7 +972,7 @@ export default function App() {
     // honest-mid-turn-queue-surface.
     handleAbort, handleForceKill, handleCancelPending, handleRespondToUi, handleSend,
     handleSelect, handleRenameSession, handleShutdownSession, handleKillProcess,
-    handleSendPromptToSession, handleResumeSession, handleResumeSessionKeepPosition, handleSpawnSession,
+    handleSendPromptToSession, handleResumeSession, handleResumeSessionKeepPosition, handleSpawnSession, handleStartNewSession,
     handleHideSession, handleUnhideSession,
     handleCreateTerminal, handleKillTerminal, handleRenameTerminal, handleTerminalTitle,
     handleOpenInlineTerminal, handleCloseInlineTerminal,
@@ -971,6 +980,79 @@ export default function App() {
     // Bridge-owned follow-up buffer mutation senders. See change: rework-mid-turn-prompt-queue.
     removeFollowUpEntry, editFollowUpEntry, promoteFollowUpEntry, clearFollowUpEntries,
   } = sessionActions;
+
+  // ── SOTA New Session + Continue derivations ──────────────────────
+  // Most-recent-first deduped cwds for a machine (palette + popover).
+  const recentCwdsForMachine = useCallback((id: string): string[] => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const sorted = Array.from(sessions.values()).sort(
+      (a, b) => (b.lastActivityAt ?? b.startedAt) - (a.lastActivityAt ?? a.startedAt),
+    );
+    for (const s of sorted) {
+      if (s.machine?.id !== id) continue;
+      if (!s.cwd || seen.has(s.cwd)) continue;
+      seen.add(s.cwd);
+      out.push(s.cwd);
+      if (out.length >= 12) break;
+    }
+    return out;
+  }, [sessions]);
+
+  // Recent ended sessions for the palette "Continue recent" + mobile sheet.
+  const recentResumable = useMemo(
+    () =>
+      Array.from(sessions.values())
+        .filter((s) => s.status === "ended" && s.sessionFile)
+        .sort(
+          (a, b) =>
+            (b.lastActivityAt ?? b.endedAt ?? b.startedAt) -
+            (a.lastActivityAt ?? a.endedAt ?? a.startedAt),
+        )
+        .slice(0, 6)
+        .map((s) => ({
+          id: s.id,
+          title: s.name ?? s.firstMessage?.slice(0, 48) ?? s.cwd.split("/").pop() ?? s.id,
+          sub: `${s.machine?.label ?? "local"} · ended`,
+          accent: s.machine?.accent,
+        })),
+    [sessions],
+  );
+
+  // Roster machine ids offline/unreachable — disables ENDED card Continue
+  // pills (SessionList prop). See design-spec §B.4b.
+  const offlineMachineIds = useMemo(
+    () =>
+      new Set(
+        rosterMachines
+          .filter((m) => m.status === "offline" || m.status === "unreachable")
+          .map((m) => m.id),
+      ),
+    [rosterMachines],
+  );
+
+  // Default New Session target: explicit pick → selected roster machine →
+  // serving daemon → first machine.
+  const defaultNewSessionTarget =
+    newSessionTarget ??
+    selectedMachineId ??
+    rosterMachines.find((m) => m.messageable || m.role === "daemon")?.id ??
+    rosterMachines[0]?.id;
+
+  const openNewSession = useCallback((machineId?: string) => {
+    setNewSessionTarget(machineId ?? undefined);
+    setNewSessionOpen(true);
+  }, []);
+
+  // Topbar "needs input" → select the first session awaiting ask_user.
+  const selectFirstNeedsInput = useCallback(() => {
+    for (const s of sessions.values()) {
+      if (s.currentTool === "ask_user" && s.status !== "ended") {
+        handleSelect(s.id);
+        return;
+      }
+    }
+  }, [sessions, handleSelect]);
 
   // Flow command interception is gone. /flows, /flows:new, /flows:edit,
   // /flows:delete are now handled by flows-plugin's command-route claims
@@ -1190,6 +1272,9 @@ export default function App() {
       gitWorktreeEnabled={gitWorktreeEnabled}
       spawnDisabled={spawnDisabled}
       machineFilter={selectedMachineId ?? undefined}
+      onNewSession={openNewSession}
+      offlineMachineIds={offlineMachineIds}
+      onClearMachineFilter={() => setSelectedMachineId(null)}
       errorSessionIds={errorSessionIds}
       retrySessionIds={retrySessionIds}
       spawnErrors={spawnErrors}
@@ -1199,14 +1284,6 @@ export default function App() {
       headerExtra={
         <div className="flex items-center gap-2">
           {launchSource !== "electron" && <PiUpdateBadge />}
-          <ServerSelector
-            currentHost={currentServerHost}
-            currentPort={currentServerPort}
-            connected={status === "connected"}
-            onSwitch={handleServerSwitch}
-            inFlightSwitchKey={inFlightSwitchKey}
-            onManageServers={() => navigate("/settings?tab=servers")}
-          />
         </div>
       }
     />
@@ -1242,29 +1319,14 @@ export default function App() {
       onClose={() => setPaletteOpen(false)}
       machines={rosterMachines}
       initialCwd={selectedId ? sessions.get(selectedId)?.cwd : undefined}
-      recentCwdsForMachine={(id) => {
-        // Most-recent-first cwds for the given machine, deduped. Cap
-        // the iteration to keep the palette open path cheap even with
-        // a large sessions Map.
-        const seen = new Set<string>();
-        const out: string[] = [];
-        const sorted = Array.from(sessions.values()).sort(
-          (a, b) => (b.lastActivityAt ?? b.startedAt) - (a.lastActivityAt ?? a.startedAt),
-        );
-        for (const s of sorted) {
-          if (s.machine?.id !== id) continue;
-          if (!s.cwd || seen.has(s.cwd)) continue;
-          seen.add(s.cwd);
-          out.push(s.cwd);
-          if (out.length >= 12) break;
-        }
-        return out;
-      }}
-      onSpawn={(cwd, machineId) =>
-        handleSpawnSession(cwd, undefined, { machineId })
+      recentCwdsForMachine={recentCwdsForMachine}
+      recentResumable={recentResumable}
+      onResume={(id) => handleResumeSession(id, "continue")}
+      onSpawn={(cwd, machineId, prompt) =>
+        handleStartNewSession({ machineId, cwd, prompt })
       }
       mobile={isMobile}
-      hideFab={!!selectedId}
+      hideFab={true}
       onToast={(text) => showToast(text, "info")}
     />
   );
@@ -1724,6 +1786,50 @@ export default function App() {
 
   const allSessionsList = useMemo(() => Array.from(sessions.values()), [sessions]);
 
+  const topBar = (
+    <TopBar
+      machines={rosterMachines}
+      sessions={allSessionsList}
+      onOpenPalette={() => setPaletteOpen(true)}
+      onOpenSettings={() => navigate("/settings")}
+      onNeedsInput={selectFirstNeedsInput}
+    />
+  );
+
+  const viewingFromBar = (
+    <ViewingFromBar
+      machines={rosterMachines}
+      host={currentServerHost}
+      port={currentServerPort}
+      launchSource={launchSource}
+      onOpenPalette={() => setPaletteOpen(true)}
+    />
+  );
+
+  const newSessionPopoverEl = (
+    <NewSessionPopover
+      open={newSessionOpen}
+      machines={rosterMachines}
+      defaultMachineId={defaultNewSessionTarget}
+      recentCwds={recentCwdsForMachine}
+      pinnedDirectories={pinnedDirectories}
+      onStart={(args) => {
+        handleStartNewSession(args);
+        setNewSessionOpen(false);
+      }}
+      onClose={() => setNewSessionOpen(false)}
+    />
+  );
+
+  const continueSheetEl = (
+    <ResumeRecentSheet
+      open={continueSheetOpen}
+      items={recentResumable}
+      onResume={(id) => handleResumeSession(id, "continue")}
+      onClose={() => setContinueSheetOpen(false)}
+    />
+  );
+
   // Outer chrome ErrorBoundary — defense-in-depth for first-party shell
   // components (sidebar, session list, content header, MobileShell). The
   // inner ChatView ErrorBoundary still wins for chat-tree errors via React's
@@ -1815,7 +1921,7 @@ export default function App() {
             goBack();
           }}
           listPanel={
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full pb-[calc(56px_+_env(safe-area-inset-bottom))]">
               {/* walle-multi-machine: InstallBanner stays (PWA add-to-home is useful
                   on mobile). MissingRequiredBanner is desktop-only — on a phone it
                   ate ~120px of the first screen and pushed sessions below the fold. */}
@@ -1900,11 +2006,22 @@ export default function App() {
                 onOpenPinDialog={() => setPinDialogOpen(true)}
                 onSpawnSession={spawnDisabled ? undefined : handleSpawnSession}
                 spawnDisabled={spawnDisabled}
+                onNewSession={openNewSession}
                 navigate={navigate}
               />
             )
           }
         />
+        <MobileActionBar
+          hidden={mobileDepth >= 1}
+          activeView="list"
+          targetAccent={rosterMachines.find((m) => m.id === defaultNewSessionTarget)?.accent}
+          onMachines={() => { setContinueSheetOpen(false); navigate("/"); }}
+          onStart={() => { setContinueSheetOpen(false); openNewSession(selectedMachineId ?? undefined); }}
+          onContinue={() => setContinueSheetOpen(true)}
+        />
+        {newSessionPopoverEl}
+        {continueSheetEl}
         {pinDialogOpen && (
           <DialogPortal>
             <PinDirectoryDialog
@@ -1923,8 +2040,11 @@ export default function App() {
 
   // Desktop: side-by-side layout
   return apiProvider(
-    <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <div className="app-shell">
       {commandPalette}
+      {newSessionPopoverEl}
+      {topBar}
+      <div className="app-body">
       {/* walle-multi-machine: 3-column layout (roster | sessions | content).
           Both the roster column and the session sidebar collapse independently
           to icon-strip / narrow widths, with state persisted to localStorage. */}
@@ -2035,6 +2155,7 @@ export default function App() {
                 onOpenPinDialog={() => setPinDialogOpen(true)}
                 onSpawnSession={spawnDisabled ? undefined : handleSpawnSession}
                 spawnDisabled={spawnDisabled}
+                onNewSession={openNewSession}
                 navigate={navigate}
               />
             )
@@ -2053,6 +2174,8 @@ export default function App() {
         })()} onMessage={onMessage} />}
         {tunnelSetupMatch && <ZrokInstallGuide onBack={() => navigate("/")} />}
       </div>
+      </div>
+      {viewingFromBar}
       {boardWorktreeForChange && !spawnDisabled && (
         <WorktreeSpawnDialog
           cwd={boardWorktreeForChange.cwd}

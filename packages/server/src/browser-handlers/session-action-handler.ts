@@ -4,7 +4,7 @@
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type { BrowserToServerMessage } from "@blackbelt-technology/pi-dashboard-shared/browser-protocol.js";
-import type { SpawnOnMachineExtensionMessage } from "@blackbelt-technology/pi-dashboard-shared/protocol.js";
+import type { SpawnOnMachineExtensionMessage, ResumeOnMachineExtensionMessage } from "@blackbelt-technology/pi-dashboard-shared/protocol.js";
 import type { SpawnMechanism } from "@blackbelt-technology/pi-dashboard-shared/platform/spawn-mechanism.js";
 import type { BrowserHandlerContext } from "./handler-context.js";
 import { spawnPiSession } from "../process-manager.js";
@@ -23,6 +23,7 @@ import {
 } from "@blackbelt-technology/pi-dashboard-shared/platform/process-identify.js";
 import { shouldInterceptReload } from "./session-action-helpers.js";
 import { keeperOptsFromSpawnResult } from "../headless-pid-registry.js";
+import { injectToDaemon } from "../daemon-inject.js";
 
 /**
  * Status message + code emitted when fork is attempted on a session whose
@@ -210,7 +211,60 @@ export async function handleSendPrompt(
 
   const promptSession = sessionManager.get(msg.sessionId);
 
+  // walle-multi-machine: machine-aware Continue routing. A session's machine
+  // is REMOTE when it carries a machine id that isn't this server's
+  // (`WALLE_MACHINE_ID`); otherwise it is local/daemon-host-owned.
+  // See change: walle-multi-machine.
+  const localMachineId = process.env.WALLE_MACHINE_ID || undefined;
+  const promptMachineId = promptSession?.machine?.id;
+  const isRemoteSession =
+    typeof promptMachineId === "string" &&
+    promptMachineId.length > 0 &&
+    promptMachineId !== localMachineId;
+
+  // Daemon dashboard session (local machine, has a daemon thread id): continue
+  // via the daemon `/inject` transport, which resumes that per-thread
+  // session's context. Fires whether the daemon container is alive or has
+  // exited, and NEVER touches the host-local `spawnPiSession` auto-resume
+  // below. See change: walle-multi-machine.
+  if (promptSession && promptSession.daemonThreadId && !isRemoteSession) {
+    const result = await injectToDaemon(msg.text, promptSession.daemonThreadId);
+    if (!result.ok) {
+      console.error(
+        `[dashboard] daemon continue inject failed for session ${msg.sessionId}: ${result.error}`,
+      );
+    }
+    return;
+  }
+
   if (promptSession?.status === "ended") {
+    // walle-multi-machine: an ENDED laptop/remote session is re-opened only
+    // through the explicit Resume affordance (`resume_on_machine`), never a
+    // bare host-pi auto-resume on this daemon. A stray composer send here is a
+    // no-op. See change: walle-multi-machine.
+    if (isRemoteSession) {
+      console.error(
+        `[dashboard] send_prompt to ended remote session ${msg.sessionId}; use resume`,
+      );
+      return;
+    }
+    // walle-multi-machine: a LOCAL daemon session reaching here has NO
+    // daemonThreadId (the inject branch above already handled threaded ones) —
+    // it is an archived autonomous task with no resumable wall-e thread. A
+    // host-local spawnPiSession would launch a bare `pi` on the daemon host
+    // with no OneCLI proxy (→ 401). Do NOT auto-resume; the dashboard surfaces
+    // "use New Session" instead. Belt-and-suspenders: the client already blocks
+    // this send. See change: walle-daemon-continue-honesty.
+    if (
+      typeof promptMachineId === "string" &&
+      promptMachineId.length > 0 &&
+      promptMachineId === localMachineId
+    ) {
+      console.debug(
+        `[dashboard] send_prompt to archived daemon session ${msg.sessionId} (no daemonThreadId); not spawning host pi`,
+      );
+      return;
+    }
     if (!promptSession.sessionFile) {
       console.error(`[dashboard] auto-resume failed: no session file for session ${msg.sessionId}`);
       return;
@@ -272,10 +326,89 @@ export async function handleResumeSession(
   msg: Extract<BrowserToServerMessage, { type: "resume_session" }>,
   ctx: BrowserHandlerContext,
 ): Promise<void> {
-  const { ws, sessionManager, pendingForkRegistry, headlessPidRegistry, pendingDashboardSpawns, pendingResumeIntents, pendingClientCorrelations, sendTo } = ctx;
+  const { ws, sessionManager, piGateway, pendingForkRegistry, headlessPidRegistry, pendingDashboardSpawns, pendingResumeIntents, pendingClientCorrelations, sendTo } = ctx;
   const session = sessionManager.get(msg.sessionId);
   if (!session) {
     sendTo(ws, { type: "resume_result", sessionId: msg.sessionId, success: false, message: "Session not found", requestId: msg.requestId });
+    return;
+  }
+
+  // walle-multi-machine: machine-aware Resume routing. When the session
+  // belongs to a REMOTE machine (a machine id that isn't this server's
+  // `WALLE_MACHINE_ID`), re-open it on the host that owns it via a
+  // `resume_on_machine` bridge frame — the bridge runs
+  // `omp --resume=<sessionId> --cwd <cwd>` detached and the resumed agent's
+  // `session_register` re-tags the card active. The host-local
+  // `spawnPiSession` path below stays for genuinely local / daemon-host-owned
+  // sessions (machine undefined or the local machine id). Mirrors the
+  // `spawn_on_machine` block in `handleSpawnSession`. See change:
+  // walle-multi-machine.
+  const localResumeMachineId = process.env.WALLE_MACHINE_ID || undefined;
+  const resumeMachineId = session.machine?.id;
+  if (
+    typeof resumeMachineId === "string" &&
+    resumeMachineId.length > 0 &&
+    resumeMachineId !== localResumeMachineId
+  ) {
+    // Synthesize a requestId when the client omitted one so the eventual
+    // resume_result / resume_on_machine_failed can still correlate.
+    const requestId =
+      typeof msg.requestId === "string" && msg.requestId.length > 0
+        ? msg.requestId
+        : randomUUID();
+    const bridge = piGateway.findBridgeByMachineId(resumeMachineId);
+    if (!bridge) {
+      sendTo(ws, {
+        type: "resume_result",
+        sessionId: msg.sessionId,
+        success: false,
+        message: `Machine ${resumeMachineId} is not online`,
+        requestId,
+      });
+      return;
+    }
+    const frame: ResumeOnMachineExtensionMessage = {
+      type: "resume_on_machine",
+      requestId,
+      sessionId: session.id,
+      cwd: session.cwd,
+      mode: msg.mode,
+    };
+    bridge.send(JSON.stringify(frame));
+    // Optimistic success keeps the card settled until the resumed agent's
+    // session_register flips it active. A bridge `resume_on_machine_failed`
+    // (timeout / invoke error) later arrives as a resume_result error via
+    // event-wiring. No server-side timer — the bridge owns the watchdog,
+    // exactly like spawn_on_machine.
+    sendTo(ws, {
+      type: "resume_result",
+      sessionId: msg.sessionId,
+      success: true,
+      message: `Routed to bridge for machine ${resumeMachineId}`,
+      requestId,
+    });
+    return;
+  }
+  // walle-multi-machine: a LOCAL daemon session (machine.id === this server's
+  // WALLE_MACHINE_ID) is continued ONLY via the dashboard composer / New
+  // Session inject transport — NEVER a host-local spawnPiSession (a bare `pi`
+  // on the daemon host has no OneCLI proxy → 401). The genuinely-local
+  // non-daemon path (machine undefined, e.g. upstream single-machine installs)
+  // still falls through to spawnPiSession below. Belt-and-suspenders: the
+  // client now hides Resume/Fork for daemon sessions. See change:
+  // walle-daemon-continue-honesty.
+  if (
+    typeof resumeMachineId === "string" &&
+    resumeMachineId.length > 0 &&
+    resumeMachineId === localResumeMachineId
+  ) {
+    sendTo(ws, {
+      type: "resume_result",
+      sessionId: msg.sessionId,
+      success: false,
+      message: "Daemon sessions continue via the dashboard composer or New Session",
+      requestId: msg.requestId,
+    });
     return;
   }
   // Resolve placement intent. Old browsers omit the field; default to

@@ -14,6 +14,8 @@ import { useMobile } from "../hooks/useMobile.js";
 import { SearchableSelectDialog, type SelectOption } from "./SearchableSelectDialog.js";
 import { FooterSegmentSlot } from "./extension-ui/FooterSegmentSlot.js";
 import { ArtifactLettersButton } from "./openspec-helpers.js";
+import { MachineChip } from "./MachineChip.js";
+import { isDaemonSession } from "../lib/daemon-session.js";
 
 interface Props {
   session?: DashboardSession;
@@ -353,7 +355,21 @@ export function SessionHeader({ session, state, onRename, showBack, onBack, mobi
   // Resume / Fork affordance gate: only render when the session is dead-but-resumable
   // AND a parent callback was supplied. The render gate replaces the dimmed elapsed-
   // duration span (a tombstone is meaningless) — see change: resume-button-in-session-header.
-  const isEnded = session.status === "ended" && Boolean(session.sessionFile) && Boolean(onResume);
+  // Daemon (WALL•E) sessions are EXCLUDED: they continue via the composer /
+  // New Session, never the host-local resume/spawn path. See change:
+  // walle-daemon-continue-honesty.
+  const isEnded =
+    !isDaemonSession(session) &&
+    session.status === "ended" &&
+    Boolean(session.sessionFile) &&
+    Boolean(onResume);
+  // Machine-aware Resume copy (design §D.2): laptop/remote → "Resume on
+  // {label}"; otherwise neutral "Resume". The route is machine-aware
+  // server-side — this is label/styling only. Resume fills with the machine
+  // accent (#15151a fg), Fork stays a neutral ghost pill.
+  const resumeLabel = session.machine?.label ? `Resume on ${session.machine.label}` : "Resume";
+  const resumeIcon = session.machine?.label ? mdiPlay : mdiPlayCircleOutline;
+  const machineAccent = session.machine?.accent ?? "var(--s-running, #5ed09a)";
 
   // Desktop: full header
   return (
@@ -376,7 +392,7 @@ export function SessionHeader({ session, state, onRename, showBack, onBack, mobi
           className="font-medium"
         />
       ) : (
-        <span className="font-medium flex items-center gap-1">
+        <span className="text-[18px] font-semibold flex items-center gap-1 min-w-0">
           <span
             onDoubleClick={() => canRename && setIsRenaming(true)}
             className={canRename ? "cursor-pointer" : ""}
@@ -394,9 +410,10 @@ export function SessionHeader({ session, state, onRename, showBack, onBack, mobi
           )}
         </span>
       )}
-      {(state.model || session.model) && <span className="text-[var(--text-secondary)]">{state.model || session.model}</span>}
+      <MachineChip machine={session.machine} variant="header" />
+      {(state.model || session.model) && <span className="text-[10px] px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">{state.model || session.model}</span>}
       {(state.thinkingLevel || session.thinkingLevel) && (
-        <span className="text-[var(--text-tertiary)] inline-flex items-center gap-0.5"><Icon path={mdiHeadLightbulb} size={0.45} /> {state.thinkingLevel || session.thinkingLevel}</span>
+        <span className="text-[10px] px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] inline-flex items-center gap-0.5"><Icon path={mdiHeadLightbulb} size={0.45} /> {state.thinkingLevel || session.thinkingLevel}</span>
       )}
       {/* Extension UI System (Phase 2): footer-segment decorator slot. */}
       {/* See change: add-extension-ui-decorations. */}
@@ -473,20 +490,21 @@ export function SessionHeader({ session, state, onRename, showBack, onBack, mobi
           <button
             onClick={() => onResume!("continue")}
             disabled={!!session.resuming}
-            className="text-[10px] px-1.5 py-0.5 rounded border border-green-500/30 text-green-400 hover:bg-green-500/10 disabled:opacity-50 disabled:cursor-not-allowed mr-1"
+            className="inline-flex items-center gap-1 h-[24px] px-2.5 rounded-[6px] text-[11px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed mr-1"
+            style={{ backgroundColor: machineAccent, color: "#15151a" }}
             title="Resume session (continue same session)"
             data-testid="header-resume-button"
           >
-            <Icon path={mdiPlayCircleOutline} size={0.4} className="inline mr-0.5" />Resume
+            <Icon path={resumeIcon} size={0.45} className="inline" />{resumeLabel}
           </button>
           <button
             onClick={() => onResume!("fork")}
             disabled={!!session.resuming}
-            className="text-[10px] px-1.5 py-0.5 rounded border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1 h-[24px] px-2.5 rounded-[6px] border border-[var(--border-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
             title="Fork session (new session from this point)"
             data-testid="header-fork-button"
           >
-            <Icon path={mdiSourceFork} size={0.4} className="inline mr-0.5" />Fork
+            <Icon path={mdiSourceFork} size={0.45} className="inline" />Fork
           </button>
         </>
       ) : (

@@ -285,6 +285,11 @@ export async function createServer(config: ServerConfig): Promise<DashboardServe
       machine: session.machine
         ? { id: session.machine.id, label: session.machine.label, accent: session.machine.accent }
         : undefined,
+      // Persist the daemon thread id (walle multi-machine) so daemon
+      // "Continue" survives container exit / server restart. `writeSessionMeta`
+      // is a full overwrite, so this must be re-emitted on every save exactly
+      // like `machine`. See change: walle-multi-machine.
+      daemonThreadId: session.daemonThreadId,
       cachedAt: Date.now(),
     });
     // Order-map key for this session: the RESOLVED group path (parent repo

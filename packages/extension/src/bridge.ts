@@ -56,6 +56,8 @@ import {
   MAX_PER_MESSAGE_BYTES as ATTACH_MAX_PER_MESSAGE_BYTES,
 } from "./ask-user-attachments.js";
 import { createSpawnOnMachineHandler, type SpawnOnMachineHandler } from "./spawn-on-machine-handler.js";
+import { createResumeOnMachineHandler, type ResumeOnMachineHandler } from "./resume-on-machine-handler.js";
+import { buildDaemonThreadIdField } from "./daemon-thread-id.js";
 import { spawn as spawnChild } from "@blackbelt-technology/pi-dashboard-shared/platform/exec.js";
 
 const HEARTBEAT_INTERVAL = 15_000;
@@ -942,6 +944,14 @@ function initBridge(pi: ExtensionAPI) {
         await spawnOnMachine.handle(msg);
         return;
       }
+      // walle-multi-machine: server-to-bridge RESUME request — re-open an
+      // ended laptop/remote session. Mirrors spawn_on_machine; the handler
+      // tracks pending by sessionId and reports failures upstream over the
+      // same WebSocket. See change: walle-multi-machine.
+      if (msg.type === "resume_on_machine") {
+        await resumeOnMachine.handle(msg);
+        return;
+      }
       const response = await commandHandler.handle(msg);
       if (response) connection.send(response);
       // Immediately send model/thinking update after handling set_thinking_level
@@ -1048,9 +1058,44 @@ function initBridge(pi: ExtensionAPI) {
           ? { PI_DASHBOARD_SPAWN_GIT_WORKTREE_BASE: opts.gitWorktreeBase }
           : {}),
       };
-      const child = spawnChild(provider, [], {
+      // walle-multi-machine: a non-empty first prompt is passed to the agent
+      // as a positional MESSAGE (`omp "<prompt>"` / `pi "<prompt>"`), the same
+      // way the launcher seeds an interactive session. Empty/omitted → bare spawn.
+      const args = opts.prompt ? [opts.prompt] : [];
+      const child = spawnChild(provider, args, {
         cwd,
         env: childEnv,
+        detached: true,
+        stdio: "ignore",
+      });
+      child.unref();
+    },
+    now: () => Date.now(),
+  });
+
+  // ── walle-multi-machine: resume_on_machine handler ─────────────────────
+  // Sibling of spawnOnMachine for the resume verb. Same WebSocket, routed by
+  // machineId. `resumeLocalAgent` shells out to a detached, provider-correct
+  // resume: omp resumes by id with `--resume=<id> --cwd <cwd>`; pi resumes by
+  // id via `--session <id>` (its `-r` is an interactive picker), with cwd
+  // carried by the child's working directory. Env inheritance matches
+  // invokeLocalAgent. `mode` rides into the pending entry; the agent CLI has
+  // no distinct fork flag, so v1 re-opens the session for both modes
+  // (fork-vs-continue is an in-session decision).
+  const resumeOnMachine: ResumeOnMachineHandler = createResumeOnMachineHandler({
+    sendUpstream: rawConnectionSend,
+    resumeLocalAgent: async (resumeSessionId, cwd, _mode) => {
+      const provider =
+        (process.env.WALLE_AGENT_PROVIDER ?? "omp").trim().toLowerCase() === "pi"
+          ? "pi"
+          : "omp";
+      const args =
+        provider === "pi"
+          ? ["--session", resumeSessionId]
+          : [`--resume=${resumeSessionId}`, "--cwd", cwd];
+      const child = spawnChild(provider, args, {
+        cwd,
+        env: { ...process.env },
         detached: true,
         stdio: "ignore",
       });
@@ -1065,11 +1110,15 @@ function initBridge(pi: ExtensionAPI) {
   // emitted by `sendStateSync` in `session-sync.ts` (via `bc.connection`),
   // without needing to thread the handler into every call site.
   //
-  // Spawn-on-machine emits its own non-`session_register` frames via
-  // `rawConnectionSend` above, so it cannot recurse through this wrapper.
+  // Both handlers emit their own non-`session_register` frames via
+  // `rawConnectionSend` above, so neither recurses through this wrapper.
+  // The register flows spawn→resume; a register matches at most one handler.
   (connection as { send: (msg: unknown) => void }).send = (msg: unknown) => {
     if (msg && (msg as { type?: string }).type === "session_register") {
-      rawConnectionSend(spawnOnMachine.onSessionRegister(msg as Parameters<typeof spawnOnMachine.onSessionRegister>[0]));
+      const reg = spawnOnMachine.onSessionRegister(
+        msg as Parameters<typeof spawnOnMachine.onSessionRegister>[0],
+      );
+      rawConnectionSend(resumeOnMachine.onSessionRegister(reg));
       return;
     }
     rawConnectionSend(msg);
@@ -1081,6 +1130,7 @@ function initBridge(pi: ExtensionAPI) {
   const spawnOnMachineTimer = setInterval(() => {
     if (!isActive()) return;
     spawnOnMachine.tickTimeouts();
+    resumeOnMachine.tickTimeouts();
   }, SPAWN_ON_MACHINE_TICK_INTERVAL);
   getBridgeState().timers!.push(spawnOnMachineTimer);
 
@@ -2093,6 +2143,9 @@ function initBridge(pi: ExtensionAPI) {
       // auto-hide-headless-worker-sessions.
       ...buildVisibilityRegisterFields(cachedHasUI, process.env),
       ...buildWalleMachineFields(process.env),
+      // walle-multi-machine: daemon-container thread id (env PI_DASHBOARD_THREAD_ID),
+      // omitted on laptop/remote and upstream installs. See change: walle-multi-machine.
+      ...buildDaemonThreadIdField(process.env),
     });
 
     // Allow event forwarding now that session_register is buffered

@@ -46,7 +46,6 @@ import { openEditor } from "../lib/editor-api.js";
 import { Toast, useToast } from "./Toast.js";
 import { BranchSwitchDialog } from "./BranchSwitchDialog.js";
 import { WorktreeSpawnDialog } from "./WorktreeSpawnDialog.js";
-import { truncatePathMiddle } from "../lib/truncate-path.js";
 import { selectedCardScrollFingerprint } from "../lib/session-list-scroll.js";
 import { TunnelButton } from "./TunnelButton.js";
 import { InstallButton } from "./InstallButton.js";
@@ -180,6 +179,21 @@ interface Props {
    * See change: walle-multi-machine.
    */
   machineFilter?: string;
+  /**
+   * walle-multi-machine: open the New Session flow (NewSessionPopover) with
+   * the given target machine pre-selected (the selected roster machine, else
+   * "this device"). Wired by ClientShell; the header "+ New session" button
+   * calls it. See design §C.1.
+   */
+  onNewSession?: (machineId?: string) => void;
+  /**
+   * Machine ids that are offline/unreachable. Drives the ENDED-card Continue
+   * pill's disabled+tooltip state (§B.4b). Optional — pills stay enabled when
+   * absent. ClientShell derives this from the roster.
+   */
+  offlineMachineIds?: Set<string>;
+  /** Clear the active machine scope (the scope chip's ×). Optional. */
+  onClearMachineFilter?: () => void;
 }
 
 // Re-export for backwards compatibility
@@ -208,7 +222,33 @@ function ToggleButton({
   );
 }
 
-export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, openspecMap, openspecGroupsMap, sessionOrderMap, onReorderSessions, onSendPrompt, onOpenSpecRefresh, onAttachProposal, onDetachProposal, onBulkArchive, onReadArtifact, onOpenPiResources, onRename, onShutdown, onResume, onResumeKeepPosition, onHideSession, onUnhideSession, onSpawnSession, spawningCwds, addSpawningCwd, clearSpawningCwd, spawnResult, onSpawnResultSeen, pinnedDirectories, onPinDirectory, onOpenPinDialog, onUnpinDirectory, onReorderPinnedDirs, workspaces, onCreateWorkspace, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceCollapsed, onAddFolderToWorkspace, onRemoveFolderFromWorkspace, terminals, onKillTerminal, onRenameTerminal, onCollapseSidebar, commandsMap, onKillProcess, onSetProcessDrawer, inflightBashMap, onAbortTool, onOpenSpecs, onOpenArchive, onOpenBoard, onViewReadme, onOpenTerminals, onOpenEditor, editorStatuses, editorAvailable, headerExtra, errorSessionIds, retrySessionIds, spawnErrors, onDismissSpawnError, resumeErrors, onDismissResumeError, gitWorktreeEnabled: gitWorktreeEnabledProp, spawnDisabled, machineFilter }: Props) {
+// SOTA session-list filter pill mode (design §B.4). Persisted to localStorage
+// directly (session-filter-storage.ts is owned elsewhere); additive, so any
+// missing/garbage value falls back to "all".
+type SessionFilterMode = "all" | "active" | "needs-input";
+const SESSION_FILTER_MODE_KEY = "dashboard:sessionFilterMode";
+const FILTER_LABELS: Record<SessionFilterMode, string> = {
+  all: "All machines",
+  active: "Active",
+  "needs-input": "Needs input",
+};
+function getSessionFilterMode(): SessionFilterMode {
+  try {
+    const raw = window.localStorage.getItem(SESSION_FILTER_MODE_KEY);
+    return raw === "active" || raw === "needs-input" ? raw : "all";
+  } catch {
+    return "all";
+  }
+}
+function setSessionFilterMode(mode: SessionFilterMode): void {
+  try {
+    window.localStorage.setItem(SESSION_FILTER_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, openspecMap, openspecGroupsMap, sessionOrderMap, onReorderSessions, onSendPrompt, onOpenSpecRefresh, onAttachProposal, onDetachProposal, onBulkArchive, onReadArtifact, onOpenPiResources, onRename, onShutdown, onResume, onResumeKeepPosition, onHideSession, onUnhideSession, onSpawnSession, spawningCwds, addSpawningCwd, clearSpawningCwd, spawnResult, onSpawnResultSeen, pinnedDirectories, onPinDirectory, onOpenPinDialog, onUnpinDirectory, onReorderPinnedDirs, workspaces, onCreateWorkspace, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceCollapsed, onAddFolderToWorkspace, onRemoveFolderFromWorkspace, terminals, onKillTerminal, onRenameTerminal, onCollapseSidebar, commandsMap, onKillProcess, onSetProcessDrawer, inflightBashMap, onAbortTool, onOpenSpecs, onOpenArchive, onOpenBoard, onViewReadme, onOpenTerminals, onOpenEditor, editorStatuses, editorAvailable, headerExtra, errorSessionIds, retrySessionIds, spawnErrors, onDismissSpawnError, resumeErrors, onDismissResumeError, gitWorktreeEnabled: gitWorktreeEnabledProp, spawnDisabled, machineFilter, onNewSession, offlineMachineIds, onClearMachineFilter }: Props) {
   // UI preference flag, default-on. Gates folder `+Worktree` and per-change
   // `⥂2+` buttons. See change: openspec-worktree-spawn-button.
   const gitWorktreeEnabled = gitWorktreeEnabledProp ?? true;
@@ -319,6 +359,13 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
   // are off by default and surfaced via this single toggle.
   // See change: pin-and-search-sessions (design D1 revised).
   const [showHidden, setShowHidden] = useState(false);
+  // SOTA filter pill (All machines / Active / Needs input). Persisted so the
+  // operator's choice survives reloads. See §B.4.
+  const [filterMode, setFilterModeState] = useState<SessionFilterMode>(() => getSessionFilterMode());
+  const updateFilterMode = useCallback((mode: SessionFilterMode) => {
+    setFilterModeState(mode);
+    setSessionFilterMode(mode);
+  }, []);
   // Sidebar-level search/filter.
   //   - workspaceFilter: substring match against the folder path.
   //     Narrows the folder list. Matching folders auto-expand.
@@ -388,11 +435,17 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
   // See change: walle-multi-machine.
   const filteredSessions = useMemo(
     () => {
-      const base = filterSessions(sessions, false, showHidden);
-      if (!machineFilter) return base;
-      return base.filter((s) => s.machine?.id === machineFilter);
+      let base = filterSessions(sessions, false, showHidden);
+      if (machineFilter) base = base.filter((s) => s.machine?.id === machineFilter);
+      // SOTA filter pill: Active = alive-and-working; Needs input = pending ask_user.
+      if (filterMode === "active") {
+        base = base.filter((s) => s.status === "active" || s.status === "streaming");
+      } else if (filterMode === "needs-input") {
+        base = base.filter((s) => s.currentTool === "ask_user");
+      }
+      return base;
     },
-    [sessions, showHidden, machineFilter],
+    [sessions, showHidden, machineFilter, filterMode],
   );
 
   const hiddenCount = useMemo(
@@ -619,7 +672,10 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
   }
 
   function renderGroup(group: DirectoryGroup, isPinned: boolean, inWorkspace: boolean = false) {
-    const dirName = truncatePathMiddle(group.cwd, 45);
+    // Bold-root path split (§B.4): leading path bold, working folder normal.
+    const lastSlash = group.cwd.replace(/\/+$/, "").lastIndexOf("/");
+    const folderRoot = lastSlash > 0 ? group.cwd.slice(0, lastSlash) : group.cwd;
+    const folderRest = lastSlash > 0 ? group.cwd.slice(lastSlash) : "";
     const isCollapsed = isFolderCollapsed(group.cwd);
 
     return (
@@ -636,8 +692,12 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
             onClick={() => handleToggleCollapse(group.cwd)}
             title={isCollapsed ? "Expand folder" : "Collapse folder"}
           >
-            <span className="text-xs font-medium text-[var(--text-secondary)] truncate flex items-center gap-1 min-w-0">
-              <Icon path={isCollapsed ? mdiFolder : mdiFolderOpen} size={0.5} className="shrink-0" /> {dirName}
+            <span className="text-xs font-medium text-[var(--text-secondary)] truncate flex items-center gap-1 min-w-0" title={group.cwd}>
+              <Icon path={isCollapsed ? mdiFolder : mdiFolderOpen} size={0.5} className="shrink-0" />
+              <span className="font-mono truncate">
+                <b className="font-medium text-[var(--text-primary)]">{folderRoot}</b>
+                <span className="text-[var(--text-secondary)]">{folderRest}</span>
+              </span>
             </span>
             {/* walle multi-machine: identify the host owning this cwd.
                 Picks the first session's machine in this group. When
@@ -734,6 +794,7 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
                 setWorktreeDialogCwd(group.cwd);
               }}
               spawnDisabled={spawnDisabled}
+              hideNewSession={!!onNewSession}
             />
           </div>
 
@@ -904,6 +965,7 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
                         onAbortTool={onAbortTool ? (toolCallId) => onAbortTool(session.id, toolCallId) : undefined}
                         hasError={errorSessionIds?.has(session.id)}
                         isRetrying={retrySessionIds?.has(session.id)}
+                        machineOffline={!!(session.machine && offlineMachineIds?.has(session.machine.id))}
                       />
                       {resumeErrors?.get(session.id) && (
                         <div data-testid="resume-error-banner" className="mt-1 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs text-red-300">
@@ -1008,6 +1070,63 @@ export function SessionList({ sessions, selectedId, onSelect, contextUsageMap, o
           <ToggleButton active={showHidden} onClick={() => setShowHidden((p) => !p)}>
             Hidden
           </ToggleButton>
+        </div>
+        {/* SOTA filter pills + machine scope chip + New Session (design §B.4 / §C.1). */}
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5" data-testid="sessions-filter-pills">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {(["all", "active", "needs-input"] as SessionFilterMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => updateFilterMode(mode)}
+                data-testid={`session-filter-${mode}`}
+                data-active={filterMode === mode ? "true" : "false"}
+                className={`px-2.5 py-0.5 rounded-full border text-[11px] transition-colors ${
+                  filterMode === mode
+                    ? "bg-[var(--bg-surface)] text-[var(--text-primary)] border-[var(--border-secondary)]"
+                    : "bg-transparent text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--border-secondary)]"
+                }`}
+              >
+                {FILTER_LABELS[mode]}
+              </button>
+            ))}
+            {machineFilter && (
+              <span
+                data-testid="machine-scope-chip"
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] py-0.5 pl-1 pr-1.5"
+              >
+                <MachineChip
+                  machine={sessions.find((s) => s.machine?.id === machineFilter)?.machine ?? { id: machineFilter }}
+                  variant="folder"
+                />
+                {onClearMachineFilter && (
+                  <button
+                    type="button"
+                    onClick={onClearMachineFilter}
+                    data-testid="machine-scope-clear"
+                    title="Clear machine filter"
+                    className="px-0.5 leading-none text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => onNewSession?.(machineFilter)}
+            disabled={!onNewSession}
+            data-testid="new-session-btn"
+            title="New session"
+            className="inline-flex h-[26px] shrink-0 items-center gap-1 rounded-[6px] px-2.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            style={{
+              backgroundColor: sessions.find((s) => s.machine?.id === machineFilter)?.machine?.accent ?? "var(--m-daemon, #5fb4a4)",
+              color: "#15151a",
+            }}
+          >
+            <Icon path={mdiPlus} size={0.6} /> New session
+          </button>
         </div>
       </div>
       <div ref={listRef} className="flex-1 overflow-y-auto">

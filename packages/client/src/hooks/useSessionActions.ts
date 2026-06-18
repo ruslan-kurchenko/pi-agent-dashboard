@@ -8,6 +8,41 @@ import { encodePromptAnswer } from "../lib/prompt-answer-encoder.js";
 import type { DashboardSession } from "@blackbelt-technology/pi-dashboard-shared/types.js";
 import type { TerminalSession } from "@blackbelt-technology/pi-dashboard-shared/terminal-types.js";
 import type { ImageContent } from "@blackbelt-technology/pi-dashboard-shared/types.js";
+import type { MachineRosterEntry } from "./useMachineRoster.js";
+import { isDaemonSession } from "../lib/daemon-session.js";
+
+/**
+ * POST a message to the wall-e daemon via the dashboard's machine-message
+ * route (`/api/machines/<id>/message` → `:9300/inject`). With NO threadId
+ * the daemon mints a fresh home-agent thread (New Session); with a
+ * threadId it resumes that thread's context (Continue). Fire-and-forget;
+ * surfaces failures through `notify`. See wiring-contract (routing rules).
+ */
+async function injectDaemonMessage(
+  apiBase: string,
+  machineId: string,
+  text: string,
+  threadId: string | undefined,
+  notify?: (text: string, kind?: "info" | "error") => void,
+  successMsg?: string,
+): Promise<void> {
+  try {
+    const res = await fetch(`${apiBase}/api/machines/${encodeURIComponent(machineId)}/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(threadId ? { text, threadId } : { text }),
+    });
+    const body = (await res.json().catch(() => null)) as { success?: boolean; error?: string } | null;
+    if (!res.ok || !body?.success) {
+      notify?.(body?.error ? `Couldn't reach the daemon: ${body.error}` : "Couldn't reach the daemon.", "error");
+      return;
+    }
+    if (successMsg) notify?.(successMsg, "info");
+  } catch (err) {
+    notify?.(`Couldn't reach the daemon: ${err instanceof Error ? err.message : String(err)}`, "error");
+  }
+}
 
 export interface SessionActionDeps {
   selectedId: string | undefined;
@@ -36,6 +71,12 @@ export interface SessionActionDeps {
    * See change: spawn-correlation-token.
    */
   pendingSpawnsRef: React.MutableRefObject<Map<string, { cwd: string; kind: "spawn" | "resume"; placeholderCwd?: string }>>;
+  /** API base for direct REST calls (daemon message route). */
+  apiBase: string;
+  /** Machine roster — drives device-aware New Session routing. */
+  machines: MachineRosterEntry[];
+  /** Toast/announce sink for spawn + daemon-message outcomes. */
+  notify?: (text: string, kind?: "info" | "error") => void;
 }
 
 export function useSessionActions(deps: SessionActionDeps) {
@@ -43,7 +84,7 @@ export function useSessionActions(deps: SessionActionDeps) {
     selectedId, send, navigate, setMobileOpen,
     sessions, setSessions, setSessionStates, setSpawningCwds, setTerminals,
     clearSpawningCwd, spawnTimeoutsRef, pendingTerminalCwdRef, terminals,
-    pendingSpawnsRef,
+    pendingSpawnsRef, apiBase, machines, notify,
   } = deps;
 
   // Native crypto.randomUUID is widely available; fall back to a Math.random
@@ -182,13 +223,31 @@ export function useSessionActions(deps: SessionActionDeps) {
   }, [send]);
 
   const handleSend = useCallback((text: string, images?: ImageContent[], delivery?: "steer" | "followUp") => {
-    if (selectedId) {
-      // Send and let pi's queue_update event populate authoritative chip state
-      // via `Session.pendingQueues`. No optimistic local pendingPrompt write.
-      // See change: add-followup-edit-and-steer-cancel.
-      send({ type: "send_prompt", sessionId: selectedId, text, images, delivery });
+    if (!selectedId) return;
+    const session = sessions.get(selectedId);
+    // Archived WALL•E session (daemon machine, NO wall-e thread): there is no
+    // thread to inject into, and the host-local send_prompt relay would spawn a
+    // bare `pi` on the daemon host (no OneCLI proxy → 401). Surface a toast and
+    // do nothing — the user must start a New Session. See change:
+    // walle-daemon-continue-honesty.
+    if (session && isDaemonSession(session) && !session.daemonThreadId) {
+      notify?.("Archived WALL•E session — start a New session to talk to WALL•E");
+      return;
     }
-  }, [selectedId, send]);
+    // Machine-aware continue: a dashboard-initiated daemon session
+    // (daemonThreadId set) resumes that wall-e thread via the message
+    // route → /inject {text, threadId}. The host-local send_prompt relay
+    // is used for alive laptop/remote sessions. (Daemon /inject is
+    // text-only — images/delivery don't apply there.) See wiring-contract.
+    if (session?.daemonThreadId && session.machine?.id) {
+      void injectDaemonMessage(apiBase, session.machine.id, text, session.daemonThreadId, notify);
+      return;
+    }
+    // Send and let pi's queue_update event populate authoritative chip state
+    // via `Session.pendingQueues`. No optimistic local pendingPrompt write.
+    // See change: add-followup-edit-and-steer-cancel.
+    send({ type: "send_prompt", sessionId: selectedId, text, images, delivery });
+  }, [selectedId, send, sessions, apiBase, notify]);
 
   const handleSelect = useCallback((id: string) => {
     navigate(`/session/${id}`);
@@ -255,7 +314,7 @@ export function useSessionActions(deps: SessionActionDeps) {
   const handleSpawnSession = useCallback((
     cwd: string,
     attachProposal?: string,
-    opts?: { gitWorktreeBase?: string; placeholderCwd?: string; machineId?: string },
+    opts?: { gitWorktreeBase?: string; placeholderCwd?: string; machineId?: string; prompt?: string },
   ) => {
     // The placeholder/disabled-button group cwd. For a normal spawn this is
     // the spawn cwd; for a worktree spawn the host passes the PARENT repo
@@ -301,8 +360,39 @@ export function useSessionActions(deps: SessionActionDeps) {
       // ⌘K command palette; server routes the request to the matching
       // bridge via `spawn_on_machine`. Unset → existing local path.
       ...(opts?.machineId ? { machineId: opts.machineId } : {}),
+      // walle-multi-machine: optional first prompt for a laptop/remote New
+      // Session, passed through to `omp` positional MESSAGES by the bridge.
+      ...(opts?.prompt ? { prompt: opts.prompt } : {}),
     });
   }, [send, clearSpawningCwd, setSpawningCwds, spawnTimeoutsRef, pendingSpawnsRef]);
+
+  /**
+   * Device-aware New Session entry point (headline feature). Routes by the
+   * target machine's role/messageability:
+   *  - daemon (role==='daemon' OR messageable): POST the REQUIRED first
+   *    prompt to the message route with NO threadId → wall-e mints a fresh
+   *    home-agent thread.
+   *  - laptop/remote: the existing `handleSpawnSession` spawn path (cwd
+   *    required, prompt optional → omp positional messages).
+   * The New Session flow is NOT gated by spawnDisabled (it is the sanctioned
+   * spawn path). See wiring-contract (Routing rules → New Session).
+   */
+  const handleStartNewSession = useCallback((args: { machineId: string; cwd?: string; prompt?: string }) => {
+    const { machineId, cwd, prompt } = args;
+    const entry = machines.find((m) => m.id === machineId);
+    const isDaemon = entry?.role === "daemon" || entry?.messageable === true;
+    const label = entry?.label ?? machineId;
+    if (isDaemon) {
+      const text = (prompt ?? "").trim();
+      if (!text) {
+        notify?.(`A first message is required to start a WALL•E session on ${label}.`, "error");
+        return;
+      }
+      void injectDaemonMessage(apiBase, machineId, text, undefined, notify, `Starting on ${label}…`);
+      return;
+    }
+    handleSpawnSession(cwd ?? "", undefined, { machineId, prompt });
+  }, [machines, apiBase, notify, handleSpawnSession]);
 
   const handleHideSession = useCallback((sessionId: string) => {
     setSessions((prev) => {
@@ -377,6 +467,7 @@ export function useSessionActions(deps: SessionActionDeps) {
     handleAbort, handleForceKill, handleCancelPending, handleRespondToUi, handleFlowAction, handleSend,
     handleSelect, handleRenameSession, handleShutdownSession, handleKillProcess,
     handleSendPromptToSession, handleResumeSession, handleResumeSessionKeepPosition, handleSpawnSession,
+    handleStartNewSession,
     handleHideSession, handleUnhideSession,
     handleCreateTerminal, handleKillTerminal, handleRenameTerminal, handleTerminalTitle,
     handleOpenInlineTerminal, handleCloseInlineTerminal,

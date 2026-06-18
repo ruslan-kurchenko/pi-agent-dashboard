@@ -100,6 +100,10 @@ function sessionFromMeta(
     // Lets a cold-start scanner show machine-tagged sessions before any
     // bridge reconnects. See change: walle-multi-machine.
     machine: meta.machine,
+    // walle-multi-machine: restore the daemon thread id from the sidecar so a
+    // cold-start scanner can drive daemon "Continue" before any bridge
+    // reconnects, exactly like `machine`. See change: walle-multi-machine.
+    daemonThreadId: meta.daemonThreadId,
     // Reconstruct worktree/jj parentage from the persisted grouping subset so
     // cold-start grouping (no live bridge) collapses this session under its
     // parent repo via `resolveSessionGroupPath`, matching live-bridge grouping.

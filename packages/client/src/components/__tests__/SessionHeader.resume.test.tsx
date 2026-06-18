@@ -156,6 +156,29 @@ describe("SessionHeader Resume / Fork pills — desktop", () => {
     fireEvent.click(forkBtn);
     expect(onResume).not.toHaveBeenCalled();
   });
+
+  it("hides Resume / Fork for a daemon (WALL•E) session and shows duration", async () => {
+    // Daemon sessions continue via the composer / New Session — never the
+    // host-local resume/spawn path. See change: walle-daemon-continue-honesty.
+    const SessionHeader = await loadDesktop();
+    const onResume = vi.fn();
+    const { container } = render(
+      <SessionHeader
+        session={makeSession({
+          status: "ended",
+          sessionFile: "/p",
+          machine: { id: "walle-daemon" },
+          daemonThreadId: "thread-1",
+        })}
+        state={createInitialState()}
+        onResume={onResume}
+      />,
+    );
+    expect(screen.queryByTestId("header-resume-button")).toBeNull();
+    expect(screen.queryByTestId("header-fork-button")).toBeNull();
+    // Tombstone duration span returns when the pills are suppressed.
+    expect(container.textContent).toMatch(/\d+s|\d+m/);
+  });
 });
 
 describe("SessionHeader Resume / Fork pills — mobile path unaffected", () => {

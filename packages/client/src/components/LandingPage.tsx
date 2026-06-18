@@ -13,6 +13,13 @@ export interface LandingPageProps {
   onOpenPinDialog?: () => void;
   /** Spawns a session in the given cwd. */
   onSpawnSession?: (cwd: string) => void;
+  /**
+   * walle-multi-machine: open the unified New Session flow (NewSessionPopover)
+   * instead of a direct in-folder spawn. When provided, step 3 routes through
+   * this (machine → cwd → first prompt) and is no longer gated on a pinned
+   * folder. Falls back to `onSpawnSession(firstPinnedCwd)` when absent. See §F.
+   */
+  onNewSession?: (machineId?: string) => void;
   /** Router navigation function (e.g. wouter's navigate). */
   navigate?: (to: string) => void;
   /** Monitor-only mode (PI_DASHBOARD_SPAWN_DISABLED): hide the spawn onboarding. */
@@ -94,6 +101,7 @@ export function LandingPage({
   firstPinnedCwd = null,
   onOpenPinDialog,
   onSpawnSession,
+  onNewSession,
   navigate,
   spawnDisabled = false,
 }: LandingPageProps = {}) {
@@ -206,20 +214,25 @@ export function LandingPage({
           ) : (
             <Card
               step={3}
-              title="Start session"
+              title="Start your first session"
               description={
-                firstPinnedCwd
-                  ? `+Session: a pi session in ${truncatePath(firstPinnedCwd)}.`
-                  : "+Session: your first pi session in a pinned folder."
+                onNewSession
+                  ? "Pick a machine and folder, then start your first session."
+                  : firstPinnedCwd
+                    ? `Start a session in ${truncatePath(firstPinnedCwd)}.`
+                    : "Start your first session in a pinned folder."
               }
               hint={step3 === "locked" ? "Requires: a pinned folder" : undefined}
-              ctaLabel="Start session"
+              ctaLabel="Start your first session"
               ctaTestId="onboarding-step-3-cta"
-              disabled={step3 === "locked" || !firstPinnedCwd}
+              disabled={step3 === "locked" || (!onNewSession && !firstPinnedCwd)}
               titleAttr={
                 step3 === "locked" ? "Pin a folder first" : undefined
               }
-              onClick={() => firstPinnedCwd && onSpawnSession?.(firstPinnedCwd)}
+              onClick={() => {
+                if (onNewSession) onNewSession();
+                else if (firstPinnedCwd) onSpawnSession?.(firstPinnedCwd);
+              }}
             />
           )}
         </div>

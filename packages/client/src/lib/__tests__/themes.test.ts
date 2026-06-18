@@ -24,15 +24,15 @@ describe("themes", () => {
 
   it("Base dark matches known CSS root values", () => {
     const base = getTheme("base")!;
-    expect(base.dark["--bg-primary"]).toBe("#0a0a0a");
-    expect(base.dark["--text-primary"]).toBe("#e5e5e5");
-    expect(base.dark["--accent-blue"]).toBe("#3b82f6");
+    expect(base.dark["--bg-primary"]).toBe("#0b0b0d");
+    expect(base.dark["--text-primary"]).toBe("#ececef");
+    expect(base.dark["--accent-blue"]).toBe("#5b9bd5");
   });
 
   it("Base light matches known CSS light values", () => {
     const base = getTheme("base")!;
-    expect(base.light["--bg-primary"]).toBe("#ffffff");
-    expect(base.light["--text-primary"]).toBe("#1a1a1a");
+    expect(base.light["--bg-primary"]).toBe("#fbfbfc");
+    expect(base.light["--text-primary"]).toBe("#1a1a1f");
   });
 
   it("getTheme returns undefined for unknown id", () => {

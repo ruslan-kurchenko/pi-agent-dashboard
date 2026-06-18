@@ -139,3 +139,60 @@ describe("event-wiring: spawn_on_machine_failed → spawn_error forwarder", () =
     }).not.toThrow();
   });
 });
+
+describe("event-wiring: resume_on_machine_failed → resume_result forwarder", () => {
+  it("translates a bridge resume failure into a resume_result error broadcast", () => {
+    const { deps, piGateway, broadcasts } = buildDeps();
+    wireEvents(deps);
+
+    piGateway.onEvent!("ignored-session-id", {
+      type: "resume_on_machine_failed",
+      requestId: "req-r9",
+      sessionId: "s-remote",
+      code: "AGENT_DIDNT_REGISTER",
+      detail: "Resumed agent did not register within the watchdog window",
+    } as never);
+
+    expect(broadcasts).toEqual([
+      {
+        type: "resume_result",
+        sessionId: "s-remote",
+        success: false,
+        message: "Resumed agent did not register within the watchdog window",
+        requestId: "req-r9",
+      },
+    ]);
+  });
+
+  it("falls back to the code when no detail is provided", () => {
+    const { deps, piGateway, broadcasts } = buildDeps();
+    wireEvents(deps);
+
+    piGateway.onEvent!("s", {
+      type: "resume_on_machine_failed",
+      requestId: "req-r10",
+      sessionId: "s-remote",
+      code: "AGENT_INVOKE_FAILED",
+    } as never);
+
+    expect(broadcasts).toHaveLength(1);
+    const out = broadcasts[0] as Record<string, unknown>;
+    expect(out.type).toBe("resume_result");
+    expect(out.success).toBe(false);
+    expect(out.message).toBe("AGENT_INVOKE_FAILED");
+    expect(out.requestId).toBe("req-r10");
+  });
+
+  it("does NOT fall through to the event_forward branch", () => {
+    const { deps, piGateway } = buildDeps();
+    wireEvents(deps);
+    expect(() => {
+      piGateway.onEvent!("s", {
+        type: "resume_on_machine_failed",
+        requestId: "req",
+        sessionId: "s",
+        code: "X",
+      } as never);
+    }).not.toThrow();
+  });
+});

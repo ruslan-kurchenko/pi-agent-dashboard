@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, type ReactNode } from "react";
 import { getApiBase } from "../lib/api-context.js";
 import { Icon } from "@mdi/react";
-import { mdiFlash, mdiOpenInNew, mdiPencil, mdiPencilOutline, mdiSourceBranch, mdiClose, mdiEyeOffOutline, mdiEyeOutline, mdiCommentQuestion, mdiPlayCircleOutline, mdiSourceFork, mdiPaperclip, mdiConsoleLine, mdiPlus, mdiSourceBranchPlus } from "@mdi/js";
+import { mdiFlash, mdiOpenInNew, mdiPencil, mdiPencilOutline, mdiSourceBranch, mdiClose, mdiEyeOffOutline, mdiEyeOutline, mdiCommentQuestion, mdiPlayCircleOutline, mdiPlay, mdiSourceFork, mdiPaperclip, mdiConsoleLine, mdiPlus, mdiSourceBranchPlus } from "@mdi/js";
 import {
   statusColors as statusColorsExt,
   sourceBadgeColors as sourceBadgeColorsExt,
@@ -18,6 +18,7 @@ export const statusColors = statusColorsExt;
 export const sourceBadgeColors = sourceBadgeColorsExt;
 import type { DashboardSession, ImageContent } from "@blackbelt-technology/pi-dashboard-shared/types.js";
 import { getSessionDisplayName } from "../lib/session-display-name.js";
+import { isDaemonSession } from "../lib/daemon-session.js";
 import { formatRelativeTime, formatTokens } from "../lib/format.js";
 import { selectBadgeTimestamp } from "../lib/session-card-time.js";
 import type { DetectedEditor } from "../lib/editor-api.js";
@@ -62,6 +63,31 @@ export function getCardPulseClass(session: DashboardSession, hasWidgetBarPrompt 
   // See change: session-card-unread-stripes.
   if (session.unread) return "card-unread-pulse";
   return "";
+}
+
+/**
+ * Machine-aware Resume/Continue affordance for an ENDED session (design §D).
+ * daemon (dashboard-initiated, carries a wall-e thread) → "Continue"
+ * (mdiPlayCircleOutline); laptop/remote (named machine) → "Resume on {label}"
+ * (mdiPlay); otherwise neutral "Resume". This is COPY ONLY — the actual route
+ * is machine-aware server-side (ClientShell's handleResume). `machineOffline`
+ * disables the pill with an offline tooltip. See wiring contract §Resume.
+ */
+function resumeAffordance(
+  session: DashboardSession,
+  machineOffline: boolean,
+): { label: string; icon: string; disabled: boolean; title: string } {
+  const daemon = !!session.daemonThreadId;
+  const machineLabel = session.machine?.label;
+  const label = daemon ? "Continue" : machineLabel ? `Resume on ${machineLabel}` : "Resume";
+  const icon = daemon || !machineLabel ? mdiPlayCircleOutline : mdiPlay;
+  const disabled = !!session.resuming || session.cwdMissing === true || machineOffline;
+  const title = machineOffline
+    ? `${machineLabel ?? "machine"} is offline — resume will queue when it reconnects`
+    : session.cwdMissing
+      ? "session's directory no longer exists"
+      : "Resume session (continue same session)";
+  return { label, icon, disabled, title };
 }
 
 export function ActivityIndicator({ session }: { session: DashboardSession }) {
@@ -354,6 +380,7 @@ export function SessionCard({
   onAbortTool,
   hasError,
   isRetrying,
+  machineOffline,
 }: {
   session: DashboardSession;
   selectedId?: string;
@@ -446,6 +473,13 @@ export function SessionCard({
   hasError?: boolean;
   /** True iff a synthesized provider retry is in flight (retryState set, no error yet). */
   isRetrying?: boolean;
+  /**
+   * walle-multi-machine: the owning machine is offline/unreachable. When
+   * true the ENDED-state Continue pill is disabled with an offline tooltip
+   * (§B.4b/§D.1). Optional — defaults to enabled; ClientShell wires it from
+   * the roster via SessionList's `offlineMachineIds`.
+   */
+  machineOffline?: boolean;
 }) {
   // dnd-kit drag handle props (attributes + listeners) supplied by
   // SortableSessionCard via context. When non-null, the desktop card's left
@@ -455,6 +489,11 @@ export function SessionCard({
   const [isRenaming, setIsRenaming] = useState(false);
   const canRename = session.status !== "ended" && !!onRename;
   const isAlive = session.status !== "ended";
+  // Daemon (WALL•E) sessions continue via the composer / New Session, never
+  // the host-local resume/spawn path. They render a "Continue" pill that just
+  // OPENS the session (when a wall-e thread backs it) and never a Fork/Resume
+  // pill. See change: walle-daemon-continue-honesty.
+  const daemon = isDaemonSession(session);
   const isMobile = useMobile();
   const prefs = useDisplayPrefs(session.id);
   const dotColor = deriveDotColorWithFlags(session, { hasError, isRetrying });
@@ -582,6 +621,43 @@ export function SessionCard({
             }
           />
         ) : null}
+        {/* ENDED-state affordance (machine-aware, §B.4b/§D.1). Daemon (WALL•E)
+            sessions get a "Continue" pill that OPENS the session — the composer
+            injects to the wall-e thread; archived daemon sessions (no thread)
+            get none (review-only). Laptop/remote keep the host-pi resume. Hit
+            target ≥44px per §G. See change: walle-daemon-continue-honesty. */}
+        {daemon && session.sessionFile && (!isAlive || isHidden) && session.daemonThreadId && (
+          <div className="mt-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); onSelect(session.id); }}
+              data-testid="session-continue-btn"
+              title="Continue this WALL•E session in the composer"
+              className="w-full min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-[6px] border text-[12px] font-medium"
+              style={{ borderColor: "var(--border-secondary, rgba(255,255,255,0.075))", color: "var(--text-secondary, #a8a8b0)", background: "rgba(255,255,255,0.06)" }}
+            >
+              <Icon path={mdiPlayCircleOutline} size={0.6} />Continue
+            </button>
+          </div>
+        )}
+        {!daemon && onResume && session.sessionFile && (!isAlive || isHidden) && (() => {
+          const aff = resumeAffordance(session, !!machineOffline);
+          const accent = session.machine?.accent ?? "var(--accent-blue, #5fb4a4)";
+          const tint = accent.startsWith("#") ? `${accent}1f` : "rgba(255,255,255,0.06)";
+          return (
+            <div className="mt-2">
+              <button
+                onClick={(e) => { e.stopPropagation(); if (!aff.disabled) onResume("continue"); }}
+                disabled={aff.disabled}
+                data-testid="session-resume-btn"
+                title={aff.title}
+                className="w-full min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-[6px] border text-[12px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ borderColor: "var(--border-secondary, rgba(255,255,255,0.075))", color: "var(--text-secondary, #a8a8b0)", background: aff.disabled ? "transparent" : tint }}
+              >
+                <Icon path={aff.icon} size={0.6} />{aff.label}
+              </button>
+            </div>
+          );
+        })()}
         {/* PROCESS subcard (mobile compact) — activity bar + drawer.
             See change: redesign-process-list-activity-bar. */}
         <MobileProcessSubcard
@@ -723,18 +799,42 @@ export function SessionCard({
           </span>
         )}
         <span className="flex-1" />
-        {onResume && session.sessionFile && (
+        {/* Daemon (WALL•E) Continue: opens the session — the composer injects to
+            the wall-e thread. No host-pi resume, no Fork. Archived daemon
+            sessions (no thread) get no pill. See change:
+            walle-daemon-continue-honesty. */}
+        {daemon && session.sessionFile && (!isAlive || isHidden) && session.daemonThreadId && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onSelect(session.id); }}
+            data-testid="session-continue-btn"
+            title="Continue this WALL•E session in the composer"
+            className="inline-flex items-center gap-px h-[22px] px-2 rounded-[6px] border bg-transparent text-[10px] font-medium"
+            style={{ borderColor: "var(--border-secondary, rgba(255,255,255,0.075))", color: "var(--text-secondary, #a8a8b0)" }}
+          >
+            <Icon path={mdiPlayCircleOutline} size={0.42} className="inline" />Continue
+          </button>
+        )}
+        {!daemon && onResume && session.sessionFile && (
           <>
-            {(!isAlive || isHidden) && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onResume("continue"); }}
-                disabled={session.resuming || session.cwdMissing === true}
-                className="text-[9px] px-1 py-px rounded border border-green-500/30 text-green-400 hover:bg-green-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={session.cwdMissing ? "session's directory no longer exists" : "Resume session (continue same session)"}
-              >
-                <Icon path={mdiPlayCircleOutline} size={0.35} className="inline mr-px" />Resume
-              </button>
-            )}
+            {(!isAlive || isHidden) && (() => {
+              const aff = resumeAffordance(session, !!machineOffline);
+              const accent = session.machine?.accent ?? "var(--accent-blue, #5fb4a4)";
+              const tint = accent.startsWith("#") ? `${accent}1f` : "rgba(255,255,255,0.08)";
+              return (
+                <button
+                  onClick={(e) => { e.stopPropagation(); if (!aff.disabled) onResume("continue"); }}
+                  disabled={aff.disabled}
+                  data-testid="session-resume-btn"
+                  title={aff.title}
+                  className="inline-flex items-center gap-px h-[22px] px-2 rounded-[6px] border bg-transparent text-[10px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ borderColor: "var(--border-secondary, rgba(255,255,255,0.075))", color: "var(--text-secondary, #a8a8b0)" }}
+                  onMouseEnter={(e) => { if (aff.disabled) return; const el = e.currentTarget; el.style.borderColor = accent; el.style.color = "var(--text-primary, #ececef)"; el.style.background = tint; }}
+                  onMouseLeave={(e) => { const el = e.currentTarget; el.style.borderColor = "var(--border-secondary, rgba(255,255,255,0.075))"; el.style.color = "var(--text-secondary, #a8a8b0)"; el.style.background = "transparent"; }}
+                >
+                  <Icon path={aff.icon} size={0.42} className="inline" />{aff.label}
+                </button>
+              );
+            })()}
             <button
               onClick={(e) => { e.stopPropagation(); onResume("fork"); }}
               disabled={session.resuming || session.cwdMissing === true}

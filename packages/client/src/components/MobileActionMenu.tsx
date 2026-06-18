@@ -25,6 +25,7 @@ import type { DetectedEditor } from "../lib/editor-api.js";
 import { ExploreDialog } from "./ExploreDialog.js";
 import { NewChangeDialog } from "./NewChangeDialog.js";
 import { DialogPortal } from "./DialogPortal.js";
+import { isDaemonSession } from "../lib/daemon-session.js";
 
 interface Props {
   session: DashboardSession;
@@ -151,8 +152,10 @@ export function MobileActionMenu({ session, editors, openspecChanges, onRename, 
             onHide && <MenuRow icon={mdiEyeOffOutline} label="Hide session" onClick={() => act(onHide)} />
           )}
 
-          {/* Resume / Fork */}
-          {onResume && session.sessionFile && (
+          {/* Resume / Fork — suppressed for daemon (WALL•E) sessions, which
+              continue via the composer / New Session, never host-pi resume.
+              See change: walle-daemon-continue-honesty. */}
+          {!isDaemonSession(session) && onResume && session.sessionFile && (
             <>
               {(!isAlive || isHidden) && (
                 <MenuRow icon={mdiPlay} label="Resume" onClick={() => act(() => onResume("continue"))} />

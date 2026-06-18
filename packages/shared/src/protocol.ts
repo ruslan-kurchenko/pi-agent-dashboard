@@ -132,6 +132,17 @@ export interface SessionRegisterMessage {
    * See change: walle-multi-machine.
    */
   spawnRequestId?: string;
+  /**
+   * walle-multi-machine: wall-e thread id for a dashboard-initiated daemon
+   * session. The in-container bridge reads it from env `PI_DASHBOARD_THREAD_ID`
+   * (injected by the wall-e launcher = `session.thread_id`) and forwards it on
+   * `session_register`. The server persists it to `.meta.json` and onto
+   * `DashboardSession.daemonThreadId` to drive daemon "Continue". Absent for
+   * laptop/remote and non-dashboard daemon sessions, and on single-machine /
+   * upstream installs.
+   * See change: walle-multi-machine.
+   */
+  daemonThreadId?: string;
 }
 
 export interface SessionUnregisterMessage {
@@ -563,6 +574,28 @@ export interface SpawnOnMachineFailedToServerMessage {
   message: string;
 }
 
+/**
+ * walle-multi-machine: extension → server failure notice the bridge emits
+ * when its handling of a `resume_on_machine` frame fails — the resume
+ * shell-out threw, or the resumed agent never re-registered within the
+ * bridge's watchdog. The server translates this into a browser-facing resume
+ * error keyed on `requestId` (mirrors `spawn_on_machine_failed` →
+ * `spawn_error`).
+ *
+ * See change: walle-multi-machine.
+ */
+export interface ResumeOnMachineFailedToServerMessage {
+  type: "resume_on_machine_failed";
+  /** Echo of the originating `resume_on_machine.requestId`. */
+  requestId: string;
+  /** The ended session the bridge tried to resume. */
+  sessionId: string;
+  /** Failure classifier — surfaces on the resulting browser resume error. */
+  code: string;
+  /** Optional human-readable detail. */
+  detail?: string;
+}
+
 export type ExtensionToServerMessage =
   | SessionRegisterMessage
   | SessionUnregisterMessage
@@ -596,7 +629,8 @@ export type ExtensionToServerMessage =
   | CwdMissingMessage
   | PluginPiMessage
   | QueueUpdateToServerMessage
-  | SpawnOnMachineFailedToServerMessage;
+  | SpawnOnMachineFailedToServerMessage
+  | ResumeOnMachineFailedToServerMessage;
 
 // ── Server → Extension ──────────────────────────────────────────────
 
@@ -862,6 +896,35 @@ export interface SpawnOnMachineExtensionMessage {
   cwd: string;
   attachProposal?: string;
   gitWorktreeBase?: string;
+  /**
+   * Optional first prompt for the new session, passed through to the local
+   * agent as positional MESSAGES (`omp run <cwd> [prompt]`). Mirrors
+   * `SpawnSessionBrowserMessage.prompt`. Omitted → bare interactive spawn.
+   * See change: walle-multi-machine.
+   */
+  prompt?: string;
+}
+
+/**
+ * walle-multi-machine: server-to-extension request to RESUME an ended session
+ * on the host where the bridge is running. Mirror of
+ * `SpawnOnMachineExtensionMessage` for the resume verb: travels over the
+ * bridge's existing WebSocket, routed by `machineId`. The bridge runs
+ * `omp --resume=<sessionId> --cwd <cwd>` (detached, same env); the resumed
+ * agent's `session_register` re-tags it with the bridge's machine. The
+ * dashboard correlates by `requestId`.
+ *
+ * `mode` selects resume semantics: `"continue"` re-opens the same session
+ * thread; `"fork"` branches a new session from its context.
+ *
+ * See change: walle-multi-machine.
+ */
+export interface ResumeOnMachineExtensionMessage {
+  type: "resume_on_machine";
+  requestId: string;
+  sessionId: string;
+  cwd: string;
+  mode: "continue" | "fork";
 }
 
 export type ServerToExtensionMessage =
@@ -897,4 +960,5 @@ export type ServerToExtensionMessage =
   | EditFollowupEntryToExtensionMessage
   | RemoveFollowupEntryToExtensionMessage
   | PromoteFollowupEntryToExtensionMessage
-  | SpawnOnMachineExtensionMessage;
+  | SpawnOnMachineExtensionMessage
+  | ResumeOnMachineExtensionMessage;

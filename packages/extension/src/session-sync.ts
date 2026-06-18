@@ -10,6 +10,7 @@ import { gatherGitInfo, gatherJjInfo } from "./vcs-info.js";
 import type { FlowInfo } from "@blackbelt-technology/pi-dashboard-shared/types.js";
 import { buildProviderCatalogue, toModelInfo } from "./provider-register.js";
 import { buildWalleMachineFields } from "./walle-machine-fields.js";
+import { buildDaemonThreadIdField } from "./daemon-thread-id.js";
 
 /**
  * Send full state sync to the server (session_register, commands, flows, models).
@@ -83,6 +84,7 @@ export function sendStateSync(
     ...(spawnToken ? { spawnToken } : {}),
     ...(dashboardSpawned ? { dashboardSpawned: true } : {}),
     ...buildWalleMachineFields(process.env),
+    ...buildDaemonThreadIdField(process.env),
   });
 
   bc.hasRegisteredOnce = true;
@@ -172,6 +174,7 @@ export function handleSessionChange(
     pid: process.pid,
     registerReason: "spawn",
     ...buildWalleMachineFields(process.env),
+    ...buildDaemonThreadIdField(process.env),
   });
 
   replaySessionEntries(bc);

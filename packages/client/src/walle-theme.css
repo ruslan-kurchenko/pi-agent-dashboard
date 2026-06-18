@@ -1,59 +1,96 @@
 /* ================================================================
-   wall-e theme — Linear/Raycast clean-dark
+   wall-e theme — SOTA multi-machine (Linear-calm, warm-gray nav)
    ================================================================
-   Neutral dark palette. No personality color in the chrome — color
-   is reserved for status (running=green, streaming=amber, needs-
-   input=purple) and per-machine identity accents.
+   Retuned to the north-star mockup
+   (mockups/walle-multi-machine/index.html). Three surfaces define
+   color in cascade order: index.css :root → THIS file's :root (wins
+   for the dark "base" theme) → lib/themes.ts inline vars (named
+   themes only). See design-spec §0.
 
-   Derived from the actual rendered mockup, not the aspirational
-   design-token comments. The mockup renders as a standard Linear-
-   class dark-mode dashboard.
+   Token policy (do NOT invent a second token system):
+   - The 200+ API names (--bg-*, --text-*, --border-*) keep their
+     NAMES; only their VALUES are retuned to the mockup ramp here.
+   - New structural bg --bg-nav (dimmed chrome) + --bg-elev (elevated
+     chip) are added. --bg-nav is mirrored into lib/themes.ts so named
+     themes get a coherent dimmed nav.
+   - Status (--s-*) and machine-identity (--m-*) tokens are brand /
+     semantic constants — defined once here in :root (theme-
+     independent), light-bumped only where contrast demands it. They
+     are NOT added to CSS_VAR_KEYS so they inherit into named themes.
 
-   Font: Source Sans 3 (or system sans) + JetBrains Mono for code.
-   Google Fonts CDN with display=swap for fast load.
+   Fonts: Inter (UI) + JetBrains Mono (mono). Loaded via the Google
+   Fonts @import at the top of index.css (display=swap). The blanket
+   `Cascadia Code !important` is gone; Cascadia survives only as a
+   code-block fallback in the mono stack.
 
-   See change: walle-multi-machine.
+   See change: dashboard-sota-multi-machine.
    ================================================================ */
 
-/* Cascadia Code is installed locally on the operator's Arch system
-   (same as Ghostty terminal font). No Google Fonts CDN needed — the
-   browser reads from the OS font cache. Falls back to system sans
-   for machines where it's not installed. */
-
-/* ── Base palette ────────────────────────────────────────────── */
+/* ── Base palette (dark) — retuned to the mockup ramp ─────────── */
 :root {
-  /* Backgrounds — neutral cool-dark, NOT tinted */
-  --bg-primary:   #0e0e10;     /* page bg — near black, faint cool */
-  --bg-secondary: #141416;     /* sidebar, nav panels */
-  --bg-tertiary:  #1c1c20;     /* cards, inputs, hover surface */
-  --bg-surface:   #26262b;     /* elevated: badges, buttons, menus */
-  --bg-hover:     rgba(255, 255, 255, 0.04);
-  --bg-selected:  #1e1e23;
-  --bg-code:      #17171b;     /* code blocks — slightly darker */
-  --bg-overlay:   rgba(0, 0, 0, 0.65);
+  /* Backgrounds — content > panels > nav (Linear "dim chrome").
+     Nav (#101012) reads dimmer/recessed than the content panels. */
+  --bg-primary:   #0b0b0d;     /* page bg; sessions column; content pane */
+  --bg-nav:       #101012;     /* topbar / roster / footer — dimmed chrome */
+  --bg-secondary: #16161a;     /* popover / panel / palette body */
+  --bg-tertiary:  #1c1c21;     /* session card, toolcall block, inputs */
+  --bg-surface:   #22222a;     /* hover surface, badges, kbd */
+  --bg-selected:  #22222a;     /* selected card/row bg */
+  --bg-elev:      #2a2a32;     /* elevated chips, avatars, selected glyph */
+  --bg-hover:     rgba(255, 255, 255, 0.03);
+  --bg-code:      #141418;     /* code blocks, tool output */
+  --bg-overlay:   rgba(0, 0, 0, 0.55);
 
-  /* Text — clean white hierarchy, no warmth */
-  --text-primary:   #eaeaec;   /* headings, names */
-  --text-secondary: #a0a0a8;   /* body, descriptions */
-  --text-tertiary:  #6a6a74;   /* labels, timestamps */
-  --text-muted:     #44444c;   /* disabled, whisper */
-  --text-faint:     #2e2e35;   /* barely visible */
+  /* Text — narrow white hierarchy */
+  --text-primary:   #ececef;
+  --text-secondary: #a8a8b0;
+  --text-tertiary:  #707078;
+  --text-muted:     #4a4a52;
+  --text-faint:     #2e2e35;
 
-  /* Borders — soft white-alpha, not colored */
-  --border-primary:   rgba(255, 255, 255, 0.08);
-  --border-secondary: rgba(255, 255, 255, 0.05);
-  --border-subtle:    rgba(255, 255, 255, 0.03);
+  /* Borders — hairlines, alpha-on-white */
+  --border-subtle:    rgba(255, 255, 255, 0.045);
+  --border-secondary: rgba(255, 255, 255, 0.075);
+  --border-primary:   rgba(255, 255, 255, 0.13);
 
-  /* Functional accents — muted, never neon */
-  --accent-green:  #4ade80;    /* running / success */
-  --accent-yellow: #e2b340;    /* streaming / warning */
-  --accent-red:    #ef6b6b;    /* error */
-  --accent-purple: #b490e0;    /* needs input */
-  --accent-orange: #e8944a;    /* attention */
-  --accent-blue:   #5b9bd5;    /* info, links */
-  --accent-primary:#5b9bd5;
+  /* Functional accents — muted, never neon (links / generic info) */
+  --accent-green:  #5ed09a;
+  --accent-yellow: #e9c46a;
+  --accent-red:    #e57373;
+  --accent-purple: #c7a9ec;
+  --accent-orange: #e6a55a;
+  --accent-blue:   #5b9bd5;
+  --accent-primary:#5fb4a4;
   --link:          #6aaddf;
   --link-hover:    #8ec4ee;
+
+  /* Status colors (--s-*) — brand-constant, theme-independent.
+     Map to session/machine STATE, never identity. */
+  --s-running:  #5ed09a;   /* active / alive */
+  --s-idle:     #b9b9c0;   /* idle */
+  --s-offline:  #6a6a72;   /* offline machine */
+  --s-unreach:  #e6a55a;   /* connecting / unreachable */
+  --s-stream:   #e9c46a;   /* streaming */
+  --s-ask:      #c7a9ec;   /* needs input (ask_user) */
+  --s-error:    #e57373;   /* error */
+
+  /* Machine identity accents (--m-*) — per-machine, never status.
+     Curated defaults; each entry's runtime `accent` overrides. */
+  --m-daemon:   #5fb4a4;   /* wall-e daemon (teal) */
+  --m-arch:     #f0a868;   /* Arch laptop (amber) */
+  --m-mac:      #b9a3e8;   /* Mac work (violet) */
+  --m-alex:     #e89aaf;   /* other operator (rose) */
+  --m-never:    #4a4a52;   /* never-connected / unknown fallback */
+
+  /* Geometry */
+  --r-card: 8px;
+  --r-chip: 6px;
+  --rail:   3px;
+
+  /* Type */
+  --f-sans:    'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --f-mono:    'JetBrains Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
+  --f-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Shadow */
   --shadow-card: rgba(0, 0, 0, 0.3);
@@ -66,32 +103,144 @@
   --neon-bg-tint:      rgba(91, 155, 213, 0.015);
 }
 
-/* ── Typography — Cascadia Code (matches Ghostty terminal) ──── */
-html, body {
-  font-family: 'Cascadia Code', 'CaskaydiaCove Nerd Font', -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-size: 13.5px;
-  line-height: 1.55;
-  letter-spacing: 0.005em;
-  font-weight: 350;
+/* ── Light theme — the wall-e aesthetic in light (was falling
+      through to index.css's generic grey). Nav is a touch greyer
+      than the white content well (inverts the dark relationship so
+      chrome still reads recessed). ───────────────────────────── */
+[data-theme="light"] {
+  --bg-primary:   #fbfbfc;
+  --bg-nav:       #f3f3f5;
+  --bg-secondary: #f6f6f8;
+  --bg-tertiary:  #eeeef1;
+  --bg-surface:   #e4e4e9;
+  --bg-selected:  #e7e7ec;
+  --bg-elev:      #dadae1;
+  --bg-hover:     rgba(0, 0, 0, 0.035);
+  --bg-code:      #f1f1f4;
+  --bg-overlay:   rgba(0, 0, 0, 0.30);
+
+  --text-primary:   #1a1a1f;
+  --text-secondary: #54545c;
+  --text-tertiary:  #85858d;
+  --text-muted:     #a8a8b0;
+  --text-faint:     #cfcfd6;
+
+  --border-subtle:    rgba(0, 0, 0, 0.05);
+  --border-secondary: rgba(0, 0, 0, 0.085);
+  --border-primary:   rgba(0, 0, 0, 0.14);
+
+  /* Status — darkened ~12-18% so swatches read on near-white */
+  --s-running:  #2f9f6e;
+  --s-idle:     #7b7b84;
+  --s-offline:  #9a9aa2;
+  --s-unreach:  #b9762a;
+  --s-stream:   #b58a1f;
+  --s-ask:      #7d56b8;
+  --s-error:    #c2453f;
+
+  /* Machine accents keep hue (used as fills/rails with #15151a fg). */
+
+  --shadow-card: rgba(0, 0, 0, 0.10);
+
+  --neon-rim-alpha:    0.50;
+  --neon-glow-alpha:   0.18;
+  --neon-glow-blur:    11px;
+  --neon-glow-opacity: 0.52;
+  --neon-bg-tint:      rgba(37, 99, 235, 0.035);
 }
 
-/* Code — same font, just tighter weight + slightly smaller */
+/* ── Typography — Inter (UI). Blanket Cascadia removed. ───────── */
+html, body {
+  font-family: var(--f-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 13px;
+  line-height: 1.4;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-feature-settings: 'cv11', 'ss03', 'cv01';
+}
+
+/* Tabular figures helper — counts/%/cost stay still while streaming. */
+.num,
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* Mono — JetBrains Mono (model ids, paths, costs, ctx %, kbd, code).
+   Cascadia Code retained only here as a fallback for terminal parity. */
 code, pre, kbd, samp,
 .font-mono, [class*="monospace"],
 .markdown-content pre,
 .markdown-content pre *,
 .markdown-content pre code,
 .markdown-content pre span {
-  font-family: 'Cascadia Code', 'CaskaydiaCove Nerd Font Mono', 'JetBrains Mono', ui-monospace, Menlo, monospace !important;
+  font-family: var(--f-mono);
   font-feature-settings: 'tnum', 'liga' 0;
   font-size: 12.5px;
-  font-weight: 350;
+  font-weight: 400;
 }
 
+/* ── App shell grid (SOTA) ───────────────────────────────────────
+   Chrome rows are fixed (topbar 40px / footer 32px); the body fills
+   between and hosts the resizable/collapsible roster + sessions
+   columns (their drag/collapse behaviour is preserved). See §B.1. */
+.app-shell {
+  display: grid;
+  grid-template-rows: 40px 1fr 32px;
+  grid-template-columns: 1fr;
+  height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+.app-topbar { min-width: 0; }
+.app-body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.app-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+.app-footer { min-width: 0; }
+
+/* Topbar / footer icon button (26px) — shared chrome affordance. */
+.wt-icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-chip);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.wt-icon-btn:hover { background: var(--bg-surface); color: var(--text-primary); }
+.wt-kbd {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  background: var(--bg-surface);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+}
+
+/* Needs-input slow opacity breathe (topbar stat + card). */
+@keyframes gentle-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.65; }
+}
+.gentle-pulse { animation: gentle-pulse 3s ease-in-out infinite; }
+
 /* ── Card selection — calmer ring ────────────────────────────── */
-/* Slow down the neon spin and reduce intensity */
 .card-selected-ring::before {
   animation-duration: 20s !important;
   opacity: 0.6 !important;
@@ -101,18 +250,18 @@ code, pre, kbd, samp,
   opacity: 0.3 !important;
 }
 
-/* ── Working/streaming pulse — warmer amber ──────────────────── */
+/* ── Working/streaming pulse — warm amber (status --s-stream) ─── */
 .card-working-pulse {
   background-image:
     repeating-linear-gradient(
       45deg,
       transparent 0 10px,
-      rgba(226, 179, 64, 0.06) 10px 20px
+      rgba(233, 196, 106, 0.06) 10px 20px
     ),
-    linear-gradient(rgba(226, 179, 64, 0.025), rgba(226, 179, 64, 0.025)) !important;
+    linear-gradient(rgba(233, 196, 106, 0.025), rgba(233, 196, 106, 0.025)) !important;
 }
 
-/* Unread pulse — calmer */
+/* Unread pulse — calmer cyan */
 .card-unread-pulse {
   background-image:
     repeating-linear-gradient(
@@ -123,13 +272,13 @@ code, pre, kbd, samp,
     linear-gradient(rgba(34, 211, 238, 0.04), rgba(34, 211, 238, 0.04)) !important;
 }
 
-/* Input pulse — subtler purple */
+/* Input pulse — subtler lilac (status --s-ask) */
 .card-input-pulse {
   animation-name: walle-input-pulse !important;
 }
 @keyframes walle-input-pulse {
   0%, 100% { background-color: transparent; }
-  50% { background-color: rgba(180, 144, 224, 0.05); }
+  50% { background-color: rgba(199, 169, 236, 0.05); }
 }
 
 /* ── Scrollbar — thin, neutral ───────────────────────────────── */
@@ -159,11 +308,11 @@ code, pre, kbd, samp,
 
 /* ── Search highlights — amber ───────────────────────────────── */
 mark.markdown-search-highlight {
-  background-color: rgba(226, 179, 64, 0.25) !important;
+  background-color: rgba(233, 196, 106, 0.25) !important;
 }
 mark.markdown-search-highlight-active {
-  background-color: rgba(226, 179, 64, 0.5) !important;
-  outline-color: rgba(226, 179, 64, 0.7) !important;
+  background-color: rgba(233, 196, 106, 0.5) !important;
+  outline-color: rgba(233, 196, 106, 0.7) !important;
 }
 
 /* ── Reduced motion ──────────────────────────────────────────── */
@@ -172,7 +321,8 @@ mark.markdown-search-highlight-active {
   .card-unread-pulse,
   .card-input-pulse,
   .card-selected-ring::before,
-  .card-selected-ring::after {
+  .card-selected-ring::after,
+  .gentle-pulse {
     animation: none !important;
   }
 }

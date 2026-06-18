@@ -24,6 +24,13 @@ interface Props {
   onSpawnWorktree?: () => void;
   /** Monitor-only mode: hides all spawn affordances. */
   spawnDisabled?: boolean;
+  /**
+   * walle-multi-machine: suppress the per-folder `+ New Session` button when
+   * the unified New Session flow (NewSessionPopover, opened from the session-
+   * list header) is the sanctioned spawn entry. The `+ New Worktree` button
+   * (a distinct affordance) is unaffected. See design §C / §F.
+   */
+  hideNewSession?: boolean;
 }
 
 export function FolderSpawnButtons({
@@ -32,23 +39,27 @@ export function FolderSpawnButtons({
   onSpawnSession,
   onSpawnWorktree,
   spawnDisabled,
+  hideNewSession,
 }: Props) {
   if (spawnDisabled) return null;
+  if (hideNewSession && !showWorktree) return null;
   return (
     <div className="flex flex-col gap-1">
-      <button
-        onClick={(e) => { e.stopPropagation(); onSpawnSession(); }}
-        disabled={spawningDisabled}
-        data-testid="folder-spawn-session-btn"
-        className={`w-full text-xs px-2 py-1 rounded border flex items-center justify-center gap-0.5 ${
-          spawningDisabled
-            ? "border-[var(--border-secondary)] text-[var(--text-secondary)] opacity-50 cursor-not-allowed"
-            : "text-green-400 border-green-500/40 bg-green-500/5 hover:text-green-300 hover:border-green-500/70"
-        }`}
-        title="New pi session"
-      >
-        <Icon path={mdiPlus} size={0.6} /> New Session
-      </button>
+      {!hideNewSession && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onSpawnSession(); }}
+          disabled={spawningDisabled}
+          data-testid="folder-spawn-session-btn"
+          className={`w-full text-xs px-2 py-1 rounded border flex items-center justify-center gap-0.5 ${
+            spawningDisabled
+              ? "border-[var(--border-secondary)] text-[var(--text-secondary)] opacity-50 cursor-not-allowed"
+              : "text-green-400 border-green-500/40 bg-green-500/5 hover:text-green-300 hover:border-green-500/70"
+          }`}
+          title="New pi session"
+        >
+          <Icon path={mdiPlus} size={0.6} /> New Session
+        </button>
+      )}
 
       {showWorktree && (
         <button

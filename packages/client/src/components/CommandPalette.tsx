@@ -79,7 +79,7 @@ export interface CommandPaletteProps {
    * machine id. The host should turn this into a `spawn_session`
    * frame with `{ cwd, machineId }`.
    */
-  onSpawn: (cwd: string, machineId: string) => void;
+  onSpawn: (cwd: string, machineId: string, prompt?: string) => void;
   /** Render the bottom-sheet variant and expose the FAB entry point. */
   mobile?: boolean;
   /** walle-multi-machine: hide the mobile FAB (e.g. while a session detail is open). */
@@ -89,6 +89,14 @@ export interface CommandPaletteProps {
    * `Spawning on <label>…`. Falls back to `console.info` when omitted.
    */
   onToast?: (text: string) => void;
+  /**
+   * walle-multi-machine: recent ended sessions for the "Continue recent"
+   * section (keyboard parity with the card/header Resume affordance).
+   * `⌘1..⌘9` resume the corresponding row.
+   */
+  recentResumable?: Array<{ id: string; title: string; sub: string; accent?: string }>;
+  /** Resume an ended session (→ `handleResumeSession(id, "continue")`). */
+  onResume?: (sessionId: string) => void;
 }
 
 export function CommandPalette({
@@ -107,13 +115,17 @@ export function CommandPalette({
    */
   hideFab = false,
   onToast,
+  recentResumable,
+  onResume,
 }: CommandPaletteProps) {
   const [step, setStep] = useState<Step>("machine");
   const [machineIdx, setMachineIdx] = useState(0);
   const [cwd, setCwd] = useState(initialCwd);
+  const [firstPrompt, setFirstPrompt] = useState("");
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
   // Index of the first online machine — preselected on every open. If
@@ -133,6 +145,7 @@ export function CommandPalette({
     setStep("machine");
     setMachineIdx(firstOnlineIdx);
     setCwd(initialCwd);
+    setFirstPrompt("");
   }, [open, firstOnlineIdx, initialCwd]);
 
   // Focus management: snapshot the active element on open, restore on
@@ -163,9 +176,13 @@ export function CommandPalette({
       }
       return;
     }
-    // For machine / confirm steps, focus the dialog container so the
-    // document-level keydown reaches us even before the operator
-    // clicks anything.
+    // Confirm step focuses the first-prompt textarea (the daemon path
+    // requires it); machine/cwd steps focus the dialog container so the
+    // document-level keydown reaches us even before the operator clicks.
+    if (step === "confirm" && textareaRef.current) {
+      textareaRef.current.focus();
+      return;
+    }
     dialogRef.current?.focus();
   }, [open, step]);
 
@@ -212,12 +229,17 @@ export function CommandPalette({
   const submit = useCallback(() => {
     const value = cwd.trim();
     if (!selectedMachine || !value) return;
-    onSpawn(value, selectedMachine.id);
-    const msg = `Spawning on ${selectedMachine.label}…`;
+    const isDaemon = selectedMachine.role === "daemon" || selectedMachine.messageable === true;
+    const prompt = firstPrompt.trim();
+    // Daemon New Session requires a first message (autonomous spawn needs one).
+    if (isDaemon && !prompt) return;
+    if (prompt) onSpawn(value, selectedMachine.id, prompt);
+    else onSpawn(value, selectedMachine.id);
+    const msg = isDaemon ? `Starting on ${selectedMachine.label}…` : `Spawning on ${selectedMachine.label}…`;
     if (onToast) onToast(msg);
     else console.info(msg);
     onClose();
-  }, [selectedMachine, cwd, onSpawn, onToast, onClose]);
+  }, [selectedMachine, cwd, firstPrompt, onSpawn, onToast, onClose]);
 
   // Document-level ⌘K toggle: fires regardless of focus location so
   // the operator can pop the palette mid-typing. PreventDefault to
@@ -247,6 +269,15 @@ export function CommandPalette({
       }
       if (step === "machine") {
         if (machines.length === 0) return;
+        if ((e.metaKey || e.ctrlKey) && /^[1-9]$/.test(e.key) && recentResumable && onResume) {
+          const item = recentResumable[parseInt(e.key, 10) - 1];
+          if (item) {
+            e.preventDefault();
+            onResume(item.id);
+            onClose();
+            return;
+          }
+        }
         if (e.key === "ArrowDown") {
           e.preventDefault();
           setMachineIdx((i) => (i + 1) % machines.length);
@@ -273,7 +304,7 @@ export function CommandPalette({
         }
       }
     },
-    [step, machines, machineIdx, cwd, onClose, submit],
+    [step, machines, machineIdx, cwd, onClose, submit, recentResumable, onResume],
   );
 
   // FAB accent — first online machine, else first machine. Empty
@@ -358,8 +389,25 @@ export function CommandPalette({
                   }}
                 />
               ) : (
-                <ConfirmStep machine={selectedMachine} cwd={cwd.trim()} onSubmit={submit} />
+                <ConfirmStep
+                  machine={selectedMachine}
+                  cwd={cwd.trim()}
+                  firstPrompt={firstPrompt}
+                  onFirstPromptChange={setFirstPrompt}
+                  textareaRef={textareaRef}
+                  onSubmit={submit}
+                />
               )}
+
+              {step === "machine" && recentResumable && recentResumable.length > 0 ? (
+                <ResumeRecentSection
+                  items={recentResumable}
+                  onPick={(id) => {
+                    onResume?.(id);
+                    onClose();
+                  }}
+                />
+              ) : null}
 
               <PaletteFooter step={step} />
             </div>
@@ -497,14 +545,17 @@ function CwdStep({
   suggestions: string[];
   onPickSuggestion: (s: string) => void;
 }) {
+  const isDaemon = machine?.role === "daemon" || machine?.messageable === true;
   return (
     <div className="flex flex-col">
       <div className="px-4 pt-3 pb-2 text-[11px] text-[var(--text-tertiary)]">
-        Spawn on{" "}
-        <span className="text-[var(--text-secondary)] font-medium">
-          {machine?.label ?? "?"}
-        </span>
-        . Enter a working directory.
+        {isDaemon ? (
+          <>Start a <span className="text-[var(--text-secondary)] font-medium">WALL•E</span> home-agent session — pick a working directory.</>
+        ) : (
+          <>Spawn omp on{" "}
+            <span className="text-[var(--text-secondary)] font-medium">{machine?.label ?? "?"}</span>
+            {" "}— choose a folder.</>
+        )}
       </div>
       <input
         ref={inputRef}
@@ -545,31 +596,56 @@ function CwdStep({
 function ConfirmStep({
   machine,
   cwd,
+  firstPrompt,
+  onFirstPromptChange,
+  textareaRef,
   onSubmit,
 }: {
   machine: MachineRosterEntry | undefined;
   cwd: string;
+  firstPrompt: string;
+  onFirstPromptChange: (v: string) => void;
+  textareaRef: React.MutableRefObject<HTMLTextAreaElement | null>;
   onSubmit: () => void;
 }) {
+  const isDaemon = machine?.role === "daemon" || machine?.messageable === true;
+  const label = machine?.label ?? "?";
+  const verb = isDaemon ? "Start a WALL•E home-agent session" : `Spawn omp on ${label}`;
+  const button = isDaemon ? "Start session" : `Spawn on ${label}`;
+  const canSubmit = !isDaemon || firstPrompt.trim().length > 0;
   return (
     <div className="flex flex-col gap-3 px-4 py-4">
       <div
         data-testid="command-palette-summary"
         className="text-[13px] text-[var(--text-primary)]"
       >
-        Start on{" "}
-        <span className="font-semibold" style={{ color: machine?.accent }}>
-          {machine?.label ?? "?"}
-        </span>{" "}
-        in <span className="font-mono text-[12px]">{cwd}</span>
+        {verb} in{" "}
+        <span className="font-mono text-[12px]" style={{ color: machine?.accent }}>
+          {cwd}
+        </span>
       </div>
+      <textarea
+        ref={textareaRef}
+        value={firstPrompt}
+        onChange={(e) => onFirstPromptChange(e.target.value)}
+        rows={3}
+        placeholder={
+          isDaemon
+            ? "First message (required) — what should WALL•E do?"
+            : "First message (optional) — leave blank to open an empty session"
+        }
+        data-testid="command-palette-first-prompt"
+        className="rounded border border-[var(--border-secondary)] bg-[var(--bg-tertiary)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] resize-none"
+      />
       <button
         type="button"
         onClick={onSubmit}
+        disabled={!canSubmit}
         data-testid="command-palette-confirm"
-        className="self-end rounded bg-[var(--accent-primary,#5fb4a4)] px-3 py-1.5 text-[12px] font-medium text-white hover:opacity-90"
+        className="self-end rounded px-3 py-1.5 text-[12px] font-semibold text-[#15151a] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ backgroundColor: machine?.accent ?? "var(--accent-primary)" }}
       >
-        Start session
+        {button}
       </button>
     </div>
   );
@@ -590,6 +666,48 @@ function PaletteFooter({ step }: { step: Step }) {
           <span><kbd>esc</kbd> back</span>
         </>
       )}
+    </div>
+  );
+}
+
+function ResumeRecentSection({
+  items,
+  onPick,
+}: {
+  items: Array<{ id: string; title: string; sub: string; accent?: string }>;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div className="border-t border-[var(--border-secondary)]">
+      <div className="px-4 pt-3 pb-1 text-[10px] uppercase tracking-[0.08em] font-semibold text-[var(--text-tertiary)]">
+        Continue recent
+      </div>
+      <div role="listbox" aria-label="Recent sessions" className="pb-2 max-h-[30vh] overflow-y-auto">
+        {items.map((it, i) => (
+          <button
+            key={it.id}
+            type="button"
+            role="option"
+            aria-selected={false}
+            data-testid="command-palette-resume"
+            onClick={() => onPick(it.id)}
+            className="grid w-full grid-cols-[26px_1fr_auto] items-center gap-3 px-4 py-2 text-left hover:bg-[var(--bg-hover)]"
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-[22px] w-[22px] items-center justify-center rounded-[5px] text-[11px] font-bold text-[#15151a]"
+              style={{ background: it.accent ?? "var(--m-never)" }}
+            >
+              ω
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[13px] text-[var(--text-primary)]">{it.title}</span>
+              <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{it.sub}</span>
+            </span>
+            {i < 9 ? <span className="wt-kbd">⌘{i + 1}</span> : <span />}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

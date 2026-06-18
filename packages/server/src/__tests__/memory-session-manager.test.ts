@@ -199,4 +199,34 @@ describe("memory-session-manager", () => {
       expect(sm2.register({ id: "s2", cwd: "/x", source: "tui" }).machine).toBeUndefined();
     });
   });
+
+  // walle-multi-machine: daemon thread id forwarded from the bridge on
+  // register, carried forward on reattach so daemon "Continue" survives a
+  // re-register where the bridge omits it.
+  describe("daemonThreadId", () => {
+    it("stamps daemonThreadId from register params onto the session", () => {
+      const sm = createMemorySessionManager();
+      const s = sm.register({
+        id: "d1",
+        cwd: "/work",
+        source: "dashboard",
+        daemonThreadId: "thread-123",
+      });
+      expect(s.daemonThreadId).toBe("thread-123");
+    });
+
+    it("carries daemonThreadId forward on reattach when the bridge omits it", () => {
+      const sm = createMemorySessionManager();
+      sm.register({ id: "d1", cwd: "/work", source: "dashboard", daemonThreadId: "thread-123" });
+      // Re-register (reattach) without daemonThreadId — must preserve the prior value.
+      const reattached = sm.register({ id: "d1", cwd: "/work", source: "dashboard", registerReason: "reattach" });
+      expect(reattached.daemonThreadId).toBe("thread-123");
+    });
+
+    it("leaves daemonThreadId undefined for laptop/remote and upstream sessions", () => {
+      const sm = createMemorySessionManager();
+      const s = sm.register({ id: "r1", cwd: "/work", source: "tui" });
+      expect(s.daemonThreadId).toBeUndefined();
+    });
+  });
 });

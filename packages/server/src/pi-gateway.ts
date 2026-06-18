@@ -487,6 +487,14 @@ export function createPiGateway(
                             typeof msg.machineAccent === "string" ? msg.machineAccent : undefined,
                         }
                       : undefined,
+                // walle-multi-machine: daemon thread id forwarded from the
+                // in-container bridge (env `PI_DASHBOARD_THREAD_ID`). Sanitize
+                // to a non-empty string; drives daemon "Continue" and is
+                // persisted to `.meta.json`. See change: walle-multi-machine.
+                daemonThreadId:
+                  typeof msg.daemonThreadId === "string" && msg.daemonThreadId.length > 0
+                    ? msg.daemonThreadId
+                    : undefined,
               });
               console.error(
                 `[gateway] session registered: ${msg.sessionId} cwd=${msg.cwd}${connectionMachineId ? ` machineId=${connectionMachineId}` : ""}`,

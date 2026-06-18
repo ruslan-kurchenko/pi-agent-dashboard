@@ -8,3 +8,9 @@
  */
 export * from "./doctor-core.js";
 export type { ViewTarget } from "./types.js";
+// walle-multi-machine: surface the new bridge<->server resume frames from the
+// barrel so server/extension/client can import them without a deep file path.
+export type {
+  ResumeOnMachineExtensionMessage,
+  ResumeOnMachineFailedToServerMessage,
+} from "./protocol.js";

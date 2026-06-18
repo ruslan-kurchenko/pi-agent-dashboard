@@ -1,3 +1,9 @@
+/* Inter (UI) + JetBrains Mono (mono) — SOTA multi-machine fonts.
+   Loaded display=swap; system fallbacks live in --f-sans / --f-mono
+   (walle-theme.css) so a blocked CDN degrades gracefully.
+   Must precede all other statements (CSS @import ordering rule). */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @import "tailwindcss";
 
 /* Plugin packages that ship client-side React components with Tailwind
@@ -32,6 +38,8 @@
   --bg-selected: #1e1e1e;
   --bg-code: #1a1a1a;          /* code blocks, tool output */
   --bg-overlay: rgba(0, 0, 0, 0.6);
+  --bg-nav: #101012;           /* dimmed chrome (topbar/roster/footer) — first-paint */
+  --bg-elev: #2a2a32;          /* elevated chip / avatar bg — first-paint */
 
   /* Text — clear hierarchy */
   --text-primary: #e5e5e5;     /* headings, important text */
@@ -78,6 +86,8 @@
   --bg-selected: #e8e8e8;
   --bg-code: #f5f5f5;
   --bg-overlay: rgba(0, 0, 0, 0.3);
+  --bg-nav: #f3f3f5;           /* dimmed chrome — light first-paint */
+  --bg-elev: #dadae1;          /* elevated chip / avatar bg — light first-paint */
 
   /* Text */
   --text-primary: #1a1a1a;

@@ -15,11 +15,10 @@ interface Props {
 }
 
 function statusColor(session: DashboardSession): string {
-  const s = session.status;
-  if (s === "ended") return "#44444c";
-  if (s === "streaming" || s === "working") return "#e2b340";
-  if (s === "waiting_for_input") return "#b490e0";
-  return "#4ade80"; // alive / default
+  if (session.status === "ended") return "var(--s-offline)";
+  if (session.currentTool === "ask_user") return "var(--s-ask)";
+  if (session.status === "streaming") return "var(--s-stream)";
+  return "var(--s-running)"; // active / idle / alive
 }
 
 export function SessionMiniStrip({ sessions, selectedId, onSelect }: Props) {

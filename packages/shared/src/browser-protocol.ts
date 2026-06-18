@@ -1058,6 +1058,16 @@ export interface SpawnSessionBrowserMessage {
    * See change: walle-multi-machine.
    */
   machineId?: string;
+  /**
+   * walle-multi-machine: optional first prompt for a laptop/remote New
+   * Session. When the spawn is routed cross-machine, the server passes this
+   * through into the `spawn_on_machine` frame's `prompt`, and the bridge
+   * forwards it to the local agent as positional MESSAGES. Omitted → bare
+   * interactive spawn. Old servers ignore unknown fields (degraded: bare
+   * spawn, user types the first prompt manually).
+   * See change: walle-multi-machine.
+   */
+  prompt?: string;
 }
 
 export interface AttachProposalBrowserMessage {

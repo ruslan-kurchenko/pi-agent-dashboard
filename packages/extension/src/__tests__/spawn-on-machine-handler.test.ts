@@ -42,8 +42,8 @@ function makeSpawnFrame(
 interface Harness {
   ctx: SpawnOnMachineContext;
   sent: unknown[];
-  invocations: Array<{ cwd: string; opts: { attachProposal?: string; gitWorktreeBase?: string } }>;
-  invokeImpl: { value: (cwd: string, opts: { attachProposal?: string; gitWorktreeBase?: string }) => Promise<void> };
+  invocations: Array<{ cwd: string; opts: { attachProposal?: string; gitWorktreeBase?: string; prompt?: string } }>;
+  invokeImpl: { value: (cwd: string, opts: { attachProposal?: string; gitWorktreeBase?: string; prompt?: string }) => Promise<void> };
   clock: { value: number };
   warnings: string[];
   errors: string[];
@@ -120,6 +120,21 @@ describe("spawn-on-machine-handler / handle()", () => {
       },
     ]);
     expect(h.errors.length).toBe(1);
+  });
+
+  it("threads a non-empty prompt through to invokeLocalAgent as the first message", async () => {
+    const h = makeHarness();
+    const handler = createSpawnOnMachineHandler(h.ctx);
+
+    await handler.handle(
+      makeSpawnFrame("/work/repo", "req-1", { prompt: "fix the flaky test" }),
+    );
+
+    // attachProposal/gitWorktreeBase are undefined here (ignored by toEqual);
+    // the prompt must reach the agent invocation verbatim.
+    expect(h.invocations).toEqual([
+      { cwd: "/work/repo", opts: { prompt: "fix the flaky test" } },
+    ]);
   });
 });
 
