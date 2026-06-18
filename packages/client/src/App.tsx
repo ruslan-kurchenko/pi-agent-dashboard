@@ -1467,7 +1467,7 @@ export default function App() {
         <div className="px-4 py-1.5 border-b border-[var(--border-primary)] text-xs text-[var(--text-tertiary)]">
           <div className="flex items-center gap-2 flex-wrap">
             {(() => {
-              const m = displayModel(selectedState.model || selectedSession.model);
+              const m = displayModel(selectedState.model) ?? displayModel(selectedSession.model);
               return m ? <span>{m}</span> : null;
             })()}
             {(selectedState.thinkingLevel || selectedSession.thinkingLevel) && (
@@ -1615,7 +1615,7 @@ export default function App() {
             } : undefined}
           />
           <StatusBar
-            model={selectedState.model ?? selectedSession?.model}
+            model={displayModel(selectedState.model) ?? displayModel(selectedSession?.model) ?? undefined}
             models={modelsMap.get(selectedId)}
             favorites={favoriteModels}
             onToggleFavorite={(label, makeFavorite) =>
